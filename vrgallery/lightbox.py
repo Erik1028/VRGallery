@@ -429,6 +429,53 @@ class ImageView(QWidget):
         self._center.setY(max(half_h, min(1 - half_h, self._center.y())))
 
 
+class _TitleStrip(QFrame):
+    """The lightbox's own top row, and the window's title bar while it is open.
+
+    The main window is frameless and wears widgets.TitleBar, and the lightbox
+    covers the whole window -- that bar included. So with a photo open there was
+    nothing left to take hold of: the window could not be dragged, could not be
+    double-clicked to maximise, and could not be snapped to an edge. It looked
+    like the app had stopped responding to its own title bar.
+
+    Dragging goes through startSystemMove for the same reason TitleBar does it:
+    the compositor keeps Aero Snap, the snap-layout flyout and the shake gesture
+    working, none of which survive moving the window by hand. The buttons in the
+    strip are children and are offered the press first, so they still click; a
+    QLabel ignores presses, so the filename is part of the drag handle.
+    """
+
+    def __init__(self, parent):
+        super().__init__(parent)
+        self.setCursor(Qt.ArrowCursor)
+
+    def _bar(self):
+        return getattr(self.window(), "titlebar", None)
+
+    def mousePressEvent(self, ev):
+        if ev.button() == Qt.LeftButton:
+            handle = self.window().windowHandle()
+            if handle is not None:
+                handle.startSystemMove()
+                ev.accept()
+                return
+        super().mousePressEvent(ev)
+
+    def mouseDoubleClickEvent(self, ev):
+        if ev.button() == Qt.LeftButton:
+            bar = self._bar()
+            win = self.window()
+            if bar is not None:
+                bar.toggle_max()          # keeps the maximise button's icon right
+            elif win.isMaximized():
+                win.showNormal()
+            else:
+                win.showMaximized()
+            ev.accept()
+            return
+        super().mouseDoubleClickEvent(ev)
+
+
 class Lightbox(QWidget):
     """Covers the whole main window. Arrow keys navigate, Esc closes."""
 
@@ -457,7 +504,8 @@ class Lightbox(QWidget):
         left.setContentsMargins(0, 0, 0, 0)
         left.setSpacing(0)
 
-        top = QHBoxLayout()
+        self.topbar = _TitleStrip(self)
+        top = QHBoxLayout(self.topbar)
         top.setContentsMargins(16, 10, 16, 10)
         top.setSpacing(8)
         self.lab_name = QLabel("")
@@ -478,7 +526,7 @@ class Lightbox(QWidget):
         self.btn_close.clicked.connect(self.close_box)
         top.addWidget(self.btn_info)
         top.addWidget(self.btn_close)
-        left.addLayout(top)
+        left.addWidget(self.topbar)
 
         self.viewer = ImageView()
         self.viewer.tag_placed.connect(self._place_tag)

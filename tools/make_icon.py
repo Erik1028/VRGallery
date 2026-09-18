@@ -3,7 +3,7 @@
 A .ico holds several sizes, and they do not have to be the same drawing. The
 logo has "VR GALLERY" set into it, which is unreadable mush at 16 px and turns
 the whole tile to noise, so the small entries get the mark only -- the camera on
-the logo's gradient, in a rounded square -- while the large ones keep the full
+the logo's gradient, in a plain rounded square -- while the large ones keep the full
 logo. That is what an icon this shape needs to stay recognisable in the tray.
 
     .venv\\Scripts\\python.exe tools\\make_icon.py [source.png]
@@ -24,7 +24,6 @@ OUT_PNG = os.path.join(HERE, "assets", "VRGallery.png")
 CAMERA_BOX = (640, 225, 1560, 975)      # the camera with room for its outline
 TEAL = (13, 202, 176)
 BLUE = (30, 172, 237)
-INK = (17, 17, 17)
 
 FULL_AT = (256, 128)                    # sizes that keep the wordmark
 MARK_AT = (64, 48, 32, 24, 16)          # below 128 the words are mush
@@ -61,10 +60,18 @@ def _gradient(size):
 
 
 def mark_tile(src, size):
-    """Camera on the gradient, in a rounded square with the logo's black edge."""
+    """Camera on the gradient, in a plain rounded square.
+
+    It used to carry the logo's black edge, a ring 5.5% of the tile wide. That
+    reads as a frame at 64 px and as the icon itself below it: at 24 px the ring
+    was thicker than the camera body, and at 16 px there was more black than
+    gradient. The tile does not need it to hold an edge -- the gradient runs
+    from #0dcab0 to #1eacee, both of which separate from a dark taskbar and from
+    an Explorer list on white, and the rounded corners come off an 8x
+    supersample, so they are clean without being outlined.
+    """
     ss = 8 if size <= 64 else 2                  # supersample; small sizes need it
     big = size * ss
-    stroke = max(2, int(round(big * 0.055)))
     radius = int(big * 0.235)
 
     mask = Image.new("L", (big, big), 0)
@@ -72,9 +79,6 @@ def mark_tile(src, size):
 
     tile = Image.new("RGBA", (big, big), (0, 0, 0, 0))
     tile.paste(_gradient(big), (0, 0), mask)
-    ImageDraw.Draw(tile).rounded_rectangle(
-        (stroke // 2, stroke // 2, big - 1 - stroke // 2, big - 1 - stroke // 2),
-        radius, outline=INK + (255,), width=stroke)
 
     cam = _trimmed(src.crop(CAMERA_BOX))
     want = int(big * 0.62)
