@@ -299,6 +299,12 @@ class ImageView(QWidget):
             self.update()
 
     def mousePressEvent(self, ev):
+        # Same trap as the title strip, and older: the viewer reaches the window
+        # border on three sides, and every press here is consumed whether or not
+        # this handler does anything with it.
+        if widgets.on_window_edge(self, ev.position().toPoint()):
+            ev.ignore()
+            return
         if ev.button() != Qt.LeftButton:
             return
         if self._tagging and self._pm:
@@ -453,6 +459,12 @@ class _TitleStrip(QFrame):
         return getattr(self.window(), "titlebar", None)
 
     def mousePressEvent(self, ev):
+        # The strip sits at y=0 of a lightbox sized to the whole client area, so
+        # its top 8 px ARE the window's resize border. Taking those presses for
+        # a drag is how the fix for the drag broke resizing from the top edge.
+        if widgets.on_window_edge(self, ev.position().toPoint()):
+            ev.ignore()
+            return
         if ev.button() == Qt.LeftButton:
             handle = self.window().windowHandle()
             if handle is not None:

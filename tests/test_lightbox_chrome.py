@@ -20,7 +20,7 @@ import pytest
 
 pytest.importorskip("PySide6")
 
-from PySide6.QtCore import QEvent, QPointF, Qt
+from PySide6.QtCore import QEvent, QPoint, QPointF, Qt
 from PySide6.QtGui import QMouseEvent
 from PySide6.QtWidgets import QApplication, QPushButton
 
@@ -70,19 +70,41 @@ def box(app, tmp_path):
 
 
 def press(widget, pos=None, button=Qt.LeftButton, dbl=False):
-    """Hand one mouse event straight to a widget and report whether it took it.
+    """Hand one mouse event straight to a widget; True if the widget kept it.
 
     Through the handler rather than through QTest.mouseClick: the whole point is
-    which widget ACCEPTS the press, and a synthesised click that Qt routes for
+    which widget CONSUMES the press, and a synthesised click that Qt routes for
     us would hide exactly that.
+
+    The event is left in the state Qt delivers it in -- ACCEPTED. That is the
+    whole subtlety of this file: a reimplemented handler that neither accepts
+    nor ignores still swallows the press, so a probe that called ignore() first
+    would report every such handler as transparent and prove nothing.
     """
     pt = QPointF(pos if pos is not None else widget.rect().center())
     kind = QEvent.MouseButtonDblClick if dbl else QEvent.MouseButtonPress
     ev = QMouseEvent(kind, pt, widget.mapToGlobal(pt.toPoint()),
                      button, button, Qt.NoModifier)
-    ev.ignore()
+    assert ev.isAccepted(), "a fresh mouse event is not accepted by default"
     (widget.mouseDoubleClickEvent if dbl else widget.mousePressEvent)(ev)
     return ev.isAccepted()
+
+
+def reaches_window(win, pt):
+    """Would a press at this window point get as far as MainWindow?
+
+    Walks the parent chain the way Qt propagates an ignored mouse event, so it
+    answers the real question: is this pixel still a resize border?
+    """
+    w = win.childAt(pt) or win
+    while True:
+        ev = QMouseEvent(QEvent.MouseButtonPress, QPointF(w.mapFrom(win, pt)),
+                         win.mapToGlobal(pt), Qt.LeftButton, Qt.LeftButton,
+                         Qt.NoModifier)
+        w.mousePressEvent(ev)
+        if ev.isAccepted() or w is win or w.parentWidget() is None:
+            return w is win, type(w).__name__
+        w = w.parentWidget()
 
 
 # ------------------------------------------------------------ the drag handle
@@ -189,3 +211,63 @@ def test_the_header_sits_at_the_top_of_the_lightbox(box):
     assert lb.topbar.y() == 0
     assert lb.topbar.width() > lb.width() // 2, "the strip does not span the column"
     assert lb.viewer.y() >= lb.topbar.height(), "the photo is under the header"
+
+
+# ------------------------------------------- the window is still resizable
+
+def _edge_points(win):
+    """One point on each border of the window, inside the 8 px grab band."""
+    w, h = win.width(), win.height()
+    return {
+        "left": QPoint(2, h // 2),
+        "right": QPoint(w - 3, h // 2),
+        "top": QPoint(w // 2, 2),
+        "bottom": QPoint(w // 2, h - 3),
+        "bottom-left": QPoint(3, h - 4),
+        "bottom-right": QPoint(w - 4, h - 4),
+    }
+
+
+def test_every_window_edge_still_resizes_with_a_photo_open(box):
+    """The lightbox is sized to the WHOLE client area, resize border included,
+    so each of its widgets sits on top of an edge the window needs back.
+
+    Two were dead when this was measured. The left one had always been: the
+    photo view reimplements mousePressEvent and never ignores, so it ate every
+    press along the edge it touches. The top one was fresher -- the drag strip
+    added for the title bar sits at y=0 and took the top border with it, which
+    is a fix for one complaint quietly causing the next.
+    """
+    win, _lb = box
+    dead = {}
+    for name, pt in _edge_points(win).items():
+        assert win._edges_at(pt), f"{name} is not on a border; the point is wrong"
+        got, stopper = reaches_window(win, pt)
+        if not got:
+            dead[name] = stopper
+    assert not dead, f"edges that no longer resize: {dead}"
+
+
+def test_the_header_still_drags_below_the_border(box):
+    """The strip hands back only the 8 px that are a border. The rest of it is
+    still the title bar, or the fix for the resize would undo the fix for the
+    drag."""
+    _win, lb = box
+    below = QPoint(lb.topbar.width() // 2, lb.topbar.height() - 4)
+    assert press(lb.topbar, pos=below), (
+        "the header stopped dragging below the resize band")
+
+
+def test_the_top_of_the_header_is_left_to_the_window(box):
+    """And the band itself must NOT drag, or there is no way to reach it."""
+    _win, lb = box
+    assert not press(lb.topbar, pos=QPoint(lb.topbar.width() // 2, 1))
+
+
+def test_the_photo_still_answers_presses_away_from_the_border(box):
+    """Handing the border back must not have made the viewer inert -- pinning a
+    face box and panning a zoomed photo both come through here."""
+    _win, lb = box
+    v = lb.viewer
+    assert press(v, pos=QPoint(v.width() // 2, v.height() // 2)), (
+        "the middle of the photo no longer takes a press")
