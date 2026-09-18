@@ -1356,6 +1356,26 @@ def scroll_body(page, left=24, right=16, bottom=20, spacing=12):
     return scroll, holder, box
 
 
+def on_window_edge(widget, pos):
+    """True when this point sits in the frameless window's resize border.
+
+    A widget covering that border has to hand the press back, or the window
+    loses an edge to resize from. Reimplementing mousePressEvent at all is
+    enough to lose it: Qt delivers a press ALREADY ACCEPTED, so a handler that
+    neither accepts nor ignores still swallows it, silently.
+
+    `pos` is in the widget's own coordinates.
+    """
+    win = widget.window()
+    at = getattr(win, "_edges_at", None)
+    if at is None or win is widget:
+        return False
+    try:
+        return bool(at(widget.mapTo(win, pos)))
+    except RuntimeError:
+        return False          # the window went away mid-event
+
+
 class TitleBar(QFrame):
     """The window's own title bar, so the chrome matches the app.
 
