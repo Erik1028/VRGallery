@@ -574,7 +574,25 @@ class GridPage(QWidget):
         return bar
 
     def _toggle_filters(self, on):
+        """Open or close the second header row.
+
+        The header is a floating overlay that sizes itself to the rows it
+        holds, and showing a child does not re-place it. It stayed at its
+        one-row height with two rows to fit, so Qt halved both: every control
+        in the header AND in the filter bar came out 14 px tall, which is
+        shorter than a glyph. That is why the title landed on its own
+        subtitle, and why the level pills, the sort box, the three combos and
+        the Apply button all came up blank -- until the next window resize
+        placed the header again and put it right.
+
+        The grid's blank top row has to follow, or the first photographs sit
+        under the bar; set_top_gap moves that one row without resetting the
+        model, so the scroll position and the selection survive.
+        """
         self.filter_bar.setVisible(on)
+        self._position_overlays()
+        if self.model.set_top_gap(self.head_height()):
+            self.view.scheduleDelayedItemsLayout()
 
     def _apply_filters(self):
         f = self.filter

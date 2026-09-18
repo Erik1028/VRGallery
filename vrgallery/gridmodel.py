@@ -161,6 +161,28 @@ class GridModel(QAbstractListModel):
         self._shape = (group_by_day, top_gap)
         self._rebuild()
 
+    def set_top_gap(self, px):
+        """Change only the blank row at the top. -> True if it moved.
+
+        Opening the filter bar makes the floating header 53 px taller, and the
+        grid has to leave that much more room under it. Saying so through
+        set_photos() would beginResetModel() the whole library to change one
+        row's height, and that drops the scroll position and the selection --
+        the same cost that used to throw you back to the top of the library.
+        """
+        px = max(0, int(px))
+        group_by_day, old = self._shape
+        if px == old:
+            return False
+        self._shape = (group_by_day, px)
+        if old and px and self._rows and self._rows[0][0] == KIND_SPACER:
+            self._rows[0] = (KIND_SPACER, px)
+            ix = self.index(0, 0)
+            self.dataChanged.emit(ix, ix)
+            return True
+        self._rebuild()      # there was no spacer row, or there is none now
+        return True
+
     def set_collapse_bursts(self, on):
         on = bool(on)
         if on != self.collapse:
