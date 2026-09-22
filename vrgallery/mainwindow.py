@@ -17,6 +17,7 @@ from . import (backup, export, fmt, frame, icons, moments, paths, questimport, s
 from .db import PhotoFilter
 from .gridmodel import ThumbCache
 from .gridpage import GridPage
+from .homepage import HomePage
 from .httpapi import LocalApi, new_token
 from .lightbox import Lightbox
 from .pages import (AlbumsPage, AvatarsPage, CleanupPage, MemoriesPage, MomentsPage,
@@ -29,6 +30,8 @@ from .tray import Tray
 from . import updates
 
 NAV = [
+    ("home", "Home", "home"),
+    None,
     ("all", "Photos", "image"),
     ("favs", "Favorites", "heart"),
     ("memories", "Memories", "clock"),
@@ -234,6 +237,7 @@ class MainWindow(QMainWindow):
         cv.addWidget(self.stack, 1)
         rl.addWidget(col, 1)
 
+        self.page_home = HomePage(self, self.cache)
         self.page_grid = GridPage(self, self.cache)
         self.page_memories = MemoriesPage(self, self.cache)
         self.page_albums = AlbumsPage(self, self.cache)
@@ -246,7 +250,7 @@ class MainWindow(QMainWindow):
         self.page_stats = StatsPage(self)
         self.page_cleanup = CleanupPage(self, self.cache)
         self.page_settings = SettingsPage(self)
-        for p in (self.page_grid, self.page_memories, self.page_albums, self.page_moments,
+        for p in (self.page_home, self.page_grid, self.page_memories, self.page_albums, self.page_moments,
                   self.page_person, self.page_sessions, self.page_worlds, self.page_people,
                   self.page_avatars, self.page_stats, self.page_cleanup,
                   self.page_settings):
@@ -299,7 +303,9 @@ class MainWindow(QMainWindow):
         QShortcut(QKeySequence("F5"), self, self.start_index)
         QShortcut(QKeySequence("Ctrl+F"), self, self._focus_search)
 
-        self.activate("all")
+        # The app opens on the front door rather than straight into the wall of
+        # photographs. Photos is one click away and keeps every level it had.
+        self.activate("home")
 
         if not cfg.get("onboarded"):
             self.welcome = Welcome(self)
@@ -319,7 +325,10 @@ class MainWindow(QMainWindow):
         self._current_key = key
         for k, b in self._nav_buttons.items():
             b.setChecked(k == key)
-        if key == "all":
+        if key == "home":
+            self.page_home.refresh()
+            self._show_page(self.page_home)
+        elif key == "all":
             self.page_grid.configure(PhotoFilter(), "Photos", back=False, levels=True)
             self._show_page(self.page_grid)
         elif key == "favs":

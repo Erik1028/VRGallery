@@ -132,7 +132,14 @@ def test_the_size_slider_goes_before_the_level_pills(window, app):
 
 def test_a_control_the_page_does_not_want_is_not_brought_back_by_a_wide_window(window, app):
     """The two reasons a control can be off screen are different, and when both
-    of them wrote to setVisible() they overwrote each other."""
+    of them wrote to setVisible() they overwrote each other.
+
+    activate() because a control on a page that is not the current one is never
+    visible whatever the header decides. This test used to get that for free
+    from the app opening on Photos; it opens on Home now, so it says so, as the
+    tests above it already did.
+    """
+    window.activate("all")
     window.resize(1600, 900)
     app.processEvents()
     page = window.page_grid
