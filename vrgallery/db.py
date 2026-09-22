@@ -861,6 +861,111 @@ class Database:
                    WHERE missing=0 AND substr(day,6,5)=? AND substr(day,1,4) < ?
                    GROUP BY y ORDER BY y DESC""", (mmdd, str(before_year))).fetchall()
 
+    def distinct_days(self):
+        """How many separate days you actually took a photograph on."""
+        with self._lock:
+            return self._conn.execute(
+                "SELECT COUNT(DISTINCT day) c FROM photos "
+                "WHERE missing=0 AND day IS NOT NULL").fetchone()["c"]
+
+    def top_people(self, limit=6, self_names=()):
+        """Who appears in the most photographs, with when you last saw them."""
+        ex, params = "", []
+        if self_names:
+            ex = " AND pp.name NOT IN (%s)" % ",".join("?" * len(self_names))
+            params = list(self_names)
+        with self._lock:
+            return self._conn.execute(
+                f"""SELECT pp.name, COUNT(DISTINCT pp.photo_id) c, MAX(p.day) last_day
+                    FROM photo_players pp JOIN photos p ON p.id=pp.photo_id
+                    WHERE p.missing=0{ex}
+                    GROUP BY pp.name ORDER BY c DESC LIMIT ?""",
+                params + [limit]).fetchall()
+
+    def last_night(self, self_names=()):
+        """The most recent evening, summed up -- the home page's one live block.
+
+        Session data comes from VRChat's own logs, which the game keeps about two
+        days of on disk, so this table only ever holds what the app was running
+        to see: 33 days at the time of writing, growing by one a day and not
+        backfillable. Every other block on the home page is therefore built from
+        photographs, which go back to the beginning. This one gets away with a
+        short window because it only ever asks for the LAST night, and that is
+        the one night a short window is guaranteed to hold.
+
+        -> a row with day / stops / minutes / world / photos, or None.
+        """
+        ex, params = "", []
+        if self_names:
+            ex = " AND sp.name NOT IN (%s)" % ",".join("?" * len(self_names))
+            params = list(self_names)
+        with self._lock:
+            last = self._conn.execute(
+                "SELECT substr(start_at,1,10) d FROM sessions "
+                "ORDER BY start_at DESC LIMIT 1").fetchone()
+            if not last:
+                return None
+            day = last["d"]
+            row = self._conn.execute(
+                """SELECT COUNT(*) stops,
+                        SUM((julianday(end_at)-julianday(start_at))*24*60) mins,
+                        MIN(start_at) first_at, MAX(end_at) last_at
+                   FROM sessions WHERE substr(start_at,1,10)=? AND end_at IS NOT NULL""",
+                (day,)).fetchone()
+            world = self._conn.execute(
+                """SELECT world_id, world_name,
+                        SUM((julianday(end_at)-julianday(start_at))*24*60) m
+                   FROM sessions WHERE substr(start_at,1,10)=? AND end_at IS NOT NULL
+                   GROUP BY world_id ORDER BY m DESC LIMIT 1""", (day,)).fetchone()
+            people = self._conn.execute(
+                f"""SELECT sp.name,
+                        SUM((julianday(sp.leave_at)-julianday(sp.join_at))*24*60) m
+                    FROM session_players sp
+                    WHERE substr(sp.join_at,1,10)=? AND sp.leave_at IS NOT NULL{ex}
+                    GROUP BY sp.name ORDER BY m DESC LIMIT 5""",
+                [day] + params).fetchall()
+            pics = self._conn.execute(
+                "SELECT COUNT(*) c FROM photos WHERE day=? AND missing=0",
+                (day,)).fetchone()["c"]
+            sid = self._conn.execute(
+                "SELECT id FROM sessions WHERE substr(start_at,1,10)=? "
+                "ORDER BY start_at DESC LIMIT 1", (day,)).fetchone()
+        return {
+            "day": day, "stops": row["stops"] or 0, "mins": row["mins"] or 0,
+            "first_at": row["first_at"], "last_at": row["last_at"],
+            "world_id": world["world_id"] if world else None,
+            "world_name": (world["world_name"] if world else "") or "",
+            "people": [(p["name"], p["m"] or 0) for p in people],
+            "photos": pics, "session_id": sid["id"] if sid else None,
+        }
+
+    def recent_worlds(self, limit=5, min_photos=3):
+        """Places you have been lately, newest first, with a cover each."""
+        with self._lock:
+            return self._conn.execute(
+                """SELECT p.world_id, MAX(p.world_name) world_name, COUNT(*) c,
+                        MAX(p.day) last_day,
+                        (SELECT q.id FROM photos q WHERE q.world_id=p.world_id
+                          AND q.missing=0 AND q.is_video=0
+                          ORDER BY q.taken_at DESC LIMIT 1) cover_id
+                   FROM photos p
+                   WHERE p.missing=0 AND p.world_id IS NOT NULL AND p.world_name<>''
+                   GROUP BY p.world_id HAVING c>=?
+                   ORDER BY last_day DESC LIMIT ?""",
+                (min_photos, limit)).fetchall()
+
+    def home_stamp(self, self_names=()):
+        """Cheap fingerprint of everything the home page reads, so a visit that
+        would rebuild the identical page can skip the work -- the same guard the
+        sessions and moments pages already use."""
+        with self._lock:
+            a = self._conn.execute(
+                "SELECT COUNT(*) c, MAX(taken_at) m, COALESCE(SUM(filesize),0) b "
+                "FROM photos WHERE missing=0").fetchone()
+            b = self._conn.execute(
+                "SELECT COUNT(*) c, MAX(start_at) m FROM sessions").fetchone()
+        return (a["c"], a["m"], a["b"], b["c"], b["m"], tuple(sorted(self_names)))
+
     def random_rich_day(self, min_photos=5):
         with self._lock:
             return self._conn.execute(
