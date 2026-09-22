@@ -169,10 +169,14 @@ APP_TILE_SVG = (
     '<stop offset="1" stop-color="#ffffff" stop-opacity="0"/></linearGradient></defs>'
     '<rect width="120" height="120" rx="30" fill="url(#g)"/>'
     '<rect x="8" y="8" width="104" height="46" rx="24" fill="url(#gl)"/>'
-    '<path d="M26 22 h68 a14 14 0 0 1 14 14 v36 a14 14 0 0 1 -14 14 h-40 '
-    'l-22 18 v-18 h-6 a14 14 0 0 1 -14 -14 v-36 a14 14 0 0 1 14 -14 z" fill="#ffffff"/>'
-    '<circle cx="44" cy="44" r="6.5" fill="{cut}"/>'
-    '<path d="M28 70 l17 -19 l12 11 l10 -9 l19 17 z" fill="{cut}"/></svg>'
+    # The same camera tools/make_icon.py draws on the small .ico tiles, at the
+    # same 82% of the square, so the fallback and the shipped icon are one mark.
+    # Two shapes and a heavy stroke on purpose: see the note beside CAMERA_SVG.
+    '<g transform="translate(10.8 10.8) scale(0.82)" fill="none" stroke="#ffffff"'
+    ' stroke-width="11" stroke-linejoin="round" stroke-linecap="round">'
+    '<path d="M14 44a8 8 0 0 1 8 -8h14l7 -10h34l7 10h14a8 8 0 0 1 8 8v48'
+    'a8 8 0 0 1 -8 8H22a8 8 0 0 1 -8 -8z"/>'
+    '<circle cx="60" cy="64" r="16" fill="#ffffff" stroke="none"/></g></svg>'
 )
 
 
@@ -204,7 +208,7 @@ def logo_pixmap(px, dpr=1.0, grad=None, cut=None):
 
 
 def _drawn_logo(px, dpr=1.0, grad=None, cut=None):
-    """The app tile: gradient squircle, gloss, and the chat-balloon mark."""
+    """The app tile: gradient squircle, gloss, and the camera mark."""
     from . import style
     grad = grad or style.ICON_GRAD
     svg = APP_TILE_SVG.format(g0=grad[0], g1=grad[1], g2=grad[2],
