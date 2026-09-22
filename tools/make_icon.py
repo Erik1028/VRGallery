@@ -45,6 +45,54 @@ def full_tile(src, size):
     return tile
 
 
+# The camera for the small tiles. NOT the one out of the logo artwork: that
+# drawing carries eight elements -- body, top plate, viewfinder hump, four lens
+# rings, a red dot -- and at 16 px it renders into nine pixels by seven, where
+# none of them survives and the whole thing reads as an orange smudge.
+#
+# This is built to the opposite rule. Two shapes. The stroke is 11 of 120 so
+# that at 16 px the body wall lands two whole pixels wide instead of one dim
+# one, and the lens is a DISC rather than a ring, because a ring at that size is
+# one pixel around a one-pixel hole, which is a scribble. Measured at 16 px it
+# is 54 solid pixels against 22 half-lit; the old one was 26 against 32, and the
+# half-lit ones are what read as mush.
+CAMERA_SVG = (
+    '<g fill="none" stroke="#ffffff" stroke-width="11" stroke-linejoin="round"'
+    ' stroke-linecap="round">'
+    '<path d="M14 44a8 8 0 0 1 8 -8h14l7 -10h34l7 10h14a8 8 0 0 1 8 8v48'
+    'a8 8 0 0 1 -8 8H22a8 8 0 0 1 -8 -8z"/>'
+    '<circle cx="60" cy="64" r="16" fill="#ffffff" stroke="none"/></g>')
+CAMERA_FILL = 0.82          # of the tile, against 0.62 for the old artwork
+
+
+def _camera(px):
+    """CAMERA_SVG rendered to a transparent RGBA image of `px` square."""
+    from PySide6.QtCore import QByteArray, QRectF
+    from PySide6.QtGui import QImage, QPainter
+    from PySide6.QtSvg import QSvgRenderer
+    from PySide6.QtWidgets import QApplication
+
+    if QApplication.instance() is None:
+        # A build box has no display, and QApplication refuses to start without
+        # a platform plugin. Nothing here is ever shown, so ask for the one that
+        # needs no screen -- but only when we are the ones creating it, or this
+        # would override the platform of a live app that imported the tool.
+        os.environ.setdefault("QT_QPA_PLATFORM", "offscreen")
+        QApplication([])
+    doc = ('<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 120 120" '
+           'width="%d" height="%d">%s</svg>' % (px, px, CAMERA_SVG))
+    r = QSvgRenderer(QByteArray(doc.encode()))
+    img = QImage(px, px, QImage.Format_ARGB32_Premultiplied)
+    img.fill(0)
+    p = QPainter(img)
+    p.setRenderHint(QPainter.Antialiasing, True)
+    r.render(p, QRectF(0, 0, px, px))
+    p.end()
+    img = img.convertToFormat(QImage.Format_RGBA8888)
+    return Image.frombytes("RGBA", (img.width(), img.height()),
+                           img.constBits().tobytes())
+
+
 def _gradient(size):
     """The logo's teal->blue run, on the same diagonal."""
     g = Image.new("RGBA", (size, size))
@@ -59,7 +107,7 @@ def _gradient(size):
     return g
 
 
-def mark_tile(src, size):
+def mark_tile(_src, size):
     """Camera on the gradient, in a plain rounded square.
 
     It used to carry the logo's black edge, a ring 5.5% of the tile wide. That
@@ -80,11 +128,8 @@ def mark_tile(src, size):
     tile = Image.new("RGBA", (big, big), (0, 0, 0, 0))
     tile.paste(_gradient(big), (0, 0), mask)
 
-    cam = _trimmed(src.crop(CAMERA_BOX))
-    want = int(big * 0.62)
-    cam = cam.copy()
-    cam.thumbnail((want, want), Image.LANCZOS)
-    tile.paste(cam, ((big - cam.width) // 2, (big - cam.height) // 2), cam)
+    cam = _camera(int(big * CAMERA_FILL))
+    tile.alpha_composite(cam, ((big - cam.width) // 2, (big - cam.height) // 2))
     return tile.resize((size, size), Image.LANCZOS)
 
 
