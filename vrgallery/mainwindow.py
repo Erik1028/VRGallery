@@ -501,7 +501,11 @@ class MainWindow(QMainWindow):
 
     def after_photos_changed(self):
         cur = self.stack.currentWidget()
-        for page in (self.page_grid, self.page_worlds, self.page_people, self.page_albums,
+        # page_home first: it is the page the app opens on and the one most
+        # likely to be sitting open while an index pass lands. It was missing
+        # from this list, so Home showed whatever it said when first drawn.
+        for page in (self.page_home, self.page_grid, self.page_worlds,
+                     self.page_people, self.page_albums,
                      self.page_stats, self.page_sessions, self.page_avatars,
                      self.page_moments):
             if cur is page:
@@ -593,6 +597,11 @@ class MainWindow(QMainWindow):
         self.activateWindow()
         if was_hidden:
             winutil.dark_titlebar(self.winId())
+            # Coming back from the tray the next morning is the commonest way to
+            # meet Home, and nothing else tells it the day has moved on. Cheap
+            # when nothing has: refresh() compares a fingerprint first.
+            if self.stack.currentWidget() is self.page_home:
+                self.page_home.refresh()
 
     def quit_app(self):
         self._quitting = True
