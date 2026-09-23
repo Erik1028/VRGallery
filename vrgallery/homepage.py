@@ -15,18 +15,19 @@ by one a day and impossible to backfill.
 
 So no block here is asked to span the whole library. The figures and "on this
 day" are built from `taken_at`, which every photograph has. The world shelf is
-2025-on and simply shows fewer rows before that. The night card reaches into the
-33-day window and gets away with it because it only ever asks for the LAST
-night, which is the one night that window always holds. A block with nothing to
-say hides itself rather than rendering an empty frame.
+2025-on and simply shows fewer rows before that. The sitting card reaches into
+the log window and gets away with it because it only ever asks for the LAST
+sitting -- or the one happening now -- which is the one thing that window always
+holds. A block with nothing to say hides itself rather than rendering an empty
+frame.
 """
 import datetime
 
-from PySide6.QtCore import Qt
+from PySide6.QtCore import Qt, QTimer
 from PySide6.QtWidgets import (QFrame, QHBoxLayout, QLabel, QSizePolicy,
                                QVBoxLayout, QWidget)
 
-from . import fmt, icons, style, widgets
+from . import fmt, icons, style, vrclog, widgets, winutil
 from .gridmodel import MiniItem
 from .pages import ThumbStripLabel
 
@@ -163,94 +164,256 @@ class Shelf(QWidget):
         self._flow.addWidget(tile)
 
 
-class LastNight(QFrame):
-    """The one block built from the logs, and the only one that needs to be.
+LIVE_EXE = "VRChat.exe"
 
-    It is this page's "carry on where you left off": the most recent evening,
-    how long it ran, how many places it moved through and who was there for it,
-    with the night's own photographs beside it.
+# A night belongs to the evening it started on. Six in the morning is where a
+# VR night ends in this library: 32% of sessions start between midnight and
+# six, and read by calendar date every one of them was "the next day".
+NIGHT_TURNS = datetime.timedelta(hours=6)
 
-    Everything inside wraps. Laid out as one fixed row -- a text column, then
-    three 168 px thumbnails, with the people on an unwrapping line -- the card
-    would not go below 953 px, and a window snapped to half a 1920 screen has
-    about 712 to give it. It took the whole page over the edge and grew a
-    horizontal scrollbar.
+
+def sitting_label(start, end, live, now):
+    """The heading for a sitting, in the words you would use for it.
+
+    "LAST NIGHT" was a constant, so on a Wednesday lunchtime it sat above a
+    Tuesday afternoon, and a week later above the same Tuesday afternoon.
+
+    The part of the day is read from the MIDDLE of the sitting, not its start:
+    one that began at 11:02 and ran to 16:23 was an afternoon, and was headed
+    "morning". And only a night is dated from six in the morning. Applied to an
+    afternoon too, that shift kept Tuesday's afternoon "THIS AFTERNOON" until
+    six on Wednesday -- at one in the morning, over a line saying "Tuesday".
     """
-
-    def __init__(self, main, cache, night, parent=None):
-        super().__init__(parent)
-        self.setObjectName("Card")
-        self.main = main
-        outer = widgets.FlowLayout(self, 0, 18, 14)
-        outer.setContentsMargins(20, 18, 20, 18)
-
-        text = QWidget(self)
-        text.setMinimumWidth(300)
-        text.setSizePolicy(QSizePolicy.Preferred, QSizePolicy.Preferred)
-        col = QVBoxLayout(text)
-        col.setContentsMargins(0, 0, 0, 0)
-        col.setSpacing(7)
-        head = QLabel("LAST NIGHT")
-        head.setObjectName("SectionLabel")
-        col.addWidget(head)
-
-        day = datetime.date.fromisoformat(night["day"])
-        title = QLabel(day.strftime("%A · %d %B %Y"))
-        title.setStyleSheet("font-size:19px; font-weight:700; color:%s;"
-                            % style.PAL["text"])
-        col.addWidget(title)
-
-        bits = []
-        mins = int(night["mins"] or 0)
-        if mins:
-            bits.append("%dh %02dm in-world" % (mins // 60, mins % 60))
-        if night["stops"]:
-            bits.append("%d %s" % (night["stops"],
-                                   fmt.plural(night["stops"], "stop")))
-        if night["world_name"]:
-            bits.append(night["world_name"])
-        bits.append("%d %s" % (night["photos"],
-                               fmt.plural(night["photos"], "photo"))
-                    if night["photos"] else "no photographs")
-        sub = _lab(" · ".join(bits), 12, "dim")
-        sub.setWordWrap(True)
-        col.addWidget(sub)
-
-        if night["people"]:
-            chips = QWidget(text)
-            flow = widgets.FlowLayout(chips, 0, 6, 6)
-            for name, m in night["people"]:
-                flow.addWidget(_person_chip(main, name, _short_hours(m)))
-            col.addWidget(chips)
-        # no trailing stretch: it made the text block claim the card's full
-        # height and left a band of empty plate under the people chips
-        outer.addWidget(text)
-
-        # The thumbnails go straight into the card's own flow rather than into a
-        # flow of their own: a nested one is handed its sizeHint width, which is
-        # one tile, so three pictures stacked into a column with the width for a
-        # row sitting empty beside them.
-        for r in night.get("shots", [])[:3]:
-            item = MiniItem(r["id"], r["path"], r["mtime"], r["filesize"], 1)
-            outer.addWidget(ThumbStripLabel(
-                main, cache, item,
-                lambda d=night["day"]: main.push_day(d), 168, 100))
+    if live:
+        return "RIGHT NOW · IN VRCHAT"
+    mid = start + (end - start) / 2
+    night = end.date() > start.date() or mid.hour >= 18 or mid.hour < 6
+    if night:
+        part = "NIGHT"
+        eve, today = (start - NIGHT_TURNS).date(), (now - NIGHT_TURNS).date()
+    else:
+        part = "MORNING" if mid.hour < 12 else "AFTERNOON"
+        eve, today = start.date(), now.date()
+    ago = (today - eve).days
+    if ago <= 0:
+        return {"NIGHT": "TONIGHT", "MORNING": "THIS MORNING",
+                "AFTERNOON": "THIS AFTERNOON"}[part]
+    if ago == 1:
+        return "LAST NIGHT" if night else "YESTERDAY " + part
+    if ago < 7:
+        return "%s %s" % (fmt.DAYS[eve.weekday()].upper(), part)
+    # a plain date is the START's date, as the line under it is: "SEPTEMBER 18"
+    # over "Saturday · September 19 · 00:30" was one sitting with two dates
+    return "%s %d" % (fmt.MONTHS[start.month - 1].upper(), start.day)
 
 
-def _person_chip(main, name, note):
-    """A name you can click, in the pill the rest of the app uses for people."""
-    c = QLabel("%s  %s" % (name, note) if note else name)
-    c.setCursor(Qt.PointingHandCursor)
-    c.setStyleSheet("background:%s; color:%s; border-radius:11px;"
-                    "padding:3px 10px; font-size:11px;"
-                    % (style.PAL["surface2"], style.PAL["text"]))
-    c.mouseReleaseEvent = lambda _e, n=name: main.push_person(n)
-    return c
+def _span(minutes):
+    m = int(round(minutes or 0))
+    return "%dm" % m if m < 60 else "%dh %02dm" % (m // 60, m % 60)
 
 
 def _short_hours(minutes):
     m = int(minutes or 0)
     return "%dm" % m if m < 60 else "%.1fh" % (m / 60.0)
+
+
+def _keep(text):
+    """One bit of a " · " line that must not break inside itself when the line
+    wraps: "3h 00m" and "in-world" on different lines read as two facts."""
+    return text.replace(" ", "\u00a0")
+
+
+class PersonChip(Clickable):
+    """A person from the sitting, as a pill.
+
+    A link only when there is somewhere to go: somebody you spent the evening
+    with but never photographed has no person page worth the name, and the chip
+    that opened one anyway landed on "Nothing here", which reads as a broken
+    library. Those chips are plain and say why on hover.
+    """
+
+    def __init__(self, main, person, live=False, parent=None):
+        target = person.get("photo_name")
+        super().__init__((lambda n=target: main.push_person(n)) if target else None,
+                         parent)
+        self.setObjectName("HomeRow")
+        self._sync()
+        lay = QHBoxLayout(self)
+        lay.setContentsMargins(10, 3, 10, 3)
+        lay.setSpacing(6)
+        if live and person.get("present"):
+            dot = QLabel("●")
+            dot.setStyleSheet("color:%s; font-size:9px;" % style.PAL["ok"])
+            dot.setToolTip("In the instance with you now")
+            lay.addWidget(dot)
+        lay.addWidget(_lab(person["name"], 11, "text" if target else "dim"))
+        lay.addWidget(_lab(_short_hours(person["minutes"]), 11, "faint"))
+        tips = []
+        if live and person.get("present"):
+            tips.append("In the instance with you now")
+        if not target:
+            tips.append("No photographs of %s yet" % person["name"])
+        elif target != person["name"]:
+            tips.append("Photographed as %s" % target)
+        if tips:
+            self.setToolTip("\n".join(tips))
+
+    def _sync(self):
+        self.setStyleSheet(
+            "QFrame#HomeRow { background:%s; border-radius:11px; }"
+            % (style.PAL["hover"] if self._hover and self._on_click
+               else style.PAL["surface2"]))
+
+
+class SittingCard(QFrame):
+    """The last stretch of time in VRChat, or the one happening now.
+
+    This is the one block on the page built from the logs, and the only one that
+    has to be: it only ever asks about the most recent sitting, which is the one
+    thing a log window a month deep is guaranteed to hold.
+
+    While the game is running it is live -- the world you are in, since when,
+    who is in the room with you, what you are wearing -- and it keeps its clock
+    moving between rebuilds through tick(). Once the game closes it becomes the
+    sitting that just ended, headed in the words you would use for it.
+
+    Laid out as the text, which stretches, and a ThumbStrip, which fits as many
+    photographs as the width allows and says "+N" for the rest. Two earlier
+    shapes failed at opposite ends. One fixed row -- text, then three 168 px
+    tiles -- would not go below 953 px, and half a 1920 screen gives the page
+    about 712. A flow fixed that and broke the wide case instead: a flow places
+    every item at its size hint and never stretches one, so the text column sat
+    at its 300 px floor and wrapped "no / photographs" onto two lines beside a
+    card that was mostly empty.
+    """
+
+    def __init__(self, main, cache, sit, live, now, open_photos, parent=None):
+        super().__init__(parent)
+        self.setObjectName("Card")
+        self.main = main
+        self._sit = sit
+        self._live = live
+        outer = QHBoxLayout(self)
+        outer.setContentsMargins(20, 18, 20, 18)
+        outer.setSpacing(20)
+
+        text = QWidget(self)
+        text.setMinimumWidth(260)
+        col = QVBoxLayout(text)
+        col.setContentsMargins(0, 0, 0, 0)
+        col.setSpacing(7)
+
+        head = QLabel(sitting_label(sit["start"], sit["end"], live, now))
+        head.setObjectName("SectionLabel")
+        if live:
+            head.setStyleSheet("color:%s;" % style.PAL["ok"])
+        col.addWidget(head)
+
+        worlds = sit["worlds"]
+        where = (sit["world_name"] if live else (worlds[0][1] if worlds else "")) \
+            or "Somewhere in VRChat"
+        title = QLabel(where)
+        title.setWordWrap(True)
+        title.setStyleSheet("font-size:19px; font-weight:700; color:%s;"
+                            % style.PAL["text"])
+        col.addWidget(title)
+
+        self._sub = _lab("", 12, "dim")
+        self._sub.setWordWrap(True)
+        col.addWidget(self._sub)
+        self.tick(now)
+
+        # Live, only the people in the room now. Under "RIGHT NOW" a row that
+        # also held everybody met earlier in the night read as "these six are
+        # here with me" when five of them had left hours ago; a 9 px dot was
+        # the only difference. The rest are counted, not listed.
+        people = list(sit["people"])
+        if live:
+            here = [d for d in people if d["present"]]
+            gone = sit["people_total"] - len(here)
+            people, more, more_word = here, gone, "earlier"
+        else:
+            more = sit["people_total"] - min(6, len(people))
+            more_word = "more"
+        if people or more > 0:
+            chips = QWidget(text)
+            flow = widgets.FlowLayout(chips, 0, 6, 6)
+            for d in people[:6]:
+                flow.addWidget(PersonChip(main, d, live))
+            if live:
+                more += max(0, len(people) - 6)
+            if more > 0:
+                flow.addWidget(_lab("+%d %s" % (more, more_word), 11, "faint"))
+            col.addWidget(chips)
+        outer.addWidget(text, 1, Qt.AlignTop)
+
+        # Newest first: on a live card that is the picture you just took. Every
+        # tile opens the whole sitting in the lightbox at its own photograph --
+        # not the day, because a sitting that crosses midnight is two days and
+        # the day page for either is the wrong set of pictures.
+        #
+        # Only the tiles that could ever be on screen are built -- a card is
+        # never wider than eight -- and "+N" is told how many more there are.
+        # Building one per photo made two hundred widgets, each registered for
+        # repaints, to show five. "+N" opens the sitting at its start: it
+        # stands for the older photographs that did not fit, and opening at
+        # the newest, as it first did, landed on the tile already beside it.
+        ids = sit["photo_ids"]
+        if ids:
+            from .pages import ThumbStrip
+            SHOW = 8
+            strip = ThumbStrip(max_h=100)
+            newest = ids[-SHOW:]
+            rows = main.db.photos_by_ids(newest)
+            for pid in reversed(newest):
+                r = rows.get(pid)
+                if r is None:
+                    continue
+                strip.add(main, cache,
+                          MiniItem(r["id"], r["path"], r["mtime"], r["filesize"], 1),
+                          lambda i=ids.index(pid): open_photos(ids, i))
+            strip.set_more(lambda: open_photos(ids, 0), len(ids) - len(newest))
+            # As wide as its tiles want and no wider: a strip that took three
+            # fifths of the card left a single photograph floating mid-card.
+            k = min(len(ids), SHOW)
+            strip.setMaximumWidth(int(k * 100 * ThumbStrip.RATIO + (k - 1) * ThumbStrip.GAP))
+            outer.addWidget(strip, 1, Qt.AlignTop)
+        # with no photographs the text has the whole card: holding room for a
+        # strip that is not there wrapped "no / photographs" at 40% of the width
+
+    def tick(self, now):
+        """Rewrite the line that depends on the clock. Cheap: one label."""
+        sit, bits = self._sit, []
+        start, end = sit["start"], sit["end"]
+        if self._live:
+            bits.append("since %s" % start.strftime("%H:%M"))
+            # In-world time, the same measure the card shows once the game
+            # closes: the sessions logged so far plus the one still running.
+            # "now - start" counted the gaps too -- a sitting takes in restarts
+            # up to 90 minutes apart -- and one read 8h 17m live and 6h 34m a
+            # minute after quitting.
+            live_m = sit["mins"] + max(0.0, (now - end).total_seconds() / 60)
+            bits.append("%s in-world so far" % _span(live_m))
+            kind = vrclog.INSTANCE_LABELS.get(sit["instance_type"], "")
+            if kind:
+                bits.append(kind)
+            if sit["avatar"]:
+                bits.append("as %s" % sit["avatar"])
+        else:
+            # the grid's day headers say "Sunday · September 20"; so does this
+            bits.append("%s · %s %d" % (fmt.DAYS[start.weekday()],
+                                        fmt.MONTHS[start.month - 1], start.day))
+            tail = end.strftime("%H:%M")
+            if end.date() != start.date():
+                tail += " " + fmt.DAYS[end.weekday()][:3]
+            bits.append("%s → %s" % (start.strftime("%H:%M"), tail))
+            bits.append("%s in-world" % _span(sit["mins"]))
+            n = len(sit["worlds"])
+            if n > 1:
+                bits.append("%d worlds" % n)
+        n = len(sit["photo_ids"])
+        bits.append("%d %s" % (n, fmt.plural(n, "photo")) if n else "no photographs")
+        self._sub.setText(" · ".join(_keep(b) for b in bits))
 
 
 class HomePage(QWidget):
@@ -268,6 +431,44 @@ class HomePage(QWidget):
         self.head.add(self.btn_random)
         self.head.attach(self.scroll, reserve_in=self.vbox)
         self._shown = None            # see refresh()
+        self._card_shown = None
+        self._card = None
+        self._dirty = False
+        # Once a minute while the page is on screen: long enough to cost nothing,
+        # short enough that a sitting's clock, the switch to "right now" when the
+        # game starts and back when it closes, and "on this day" at midnight all
+        # land without anybody having to leave the page and come back.
+        self._clock = QTimer(self)
+        self._clock.setInterval(60000)
+        self._clock.timeout.connect(self._on_clock)
+
+    def showEvent(self, ev):
+        super().showEvent(ev)
+        self._clock.start()
+        if self._dirty:
+            QTimer.singleShot(0, self.refresh)
+
+    def _on_screen(self):
+        return self.isVisible() and not self.window().isMinimized()
+
+    def hideEvent(self, ev):
+        self._clock.stop()
+        super().hideEvent(ev)
+
+    def _on_clock(self):
+        if self.isVisible():
+            self.refresh()
+
+    def _live(self, newest_log):
+        """Is the game running, and is the newest session in the library the
+        one it is writing? Both, or the card would call a sitting from yesterday
+        "right now" in the seconds between the game starting and the log pass
+        catching up."""
+        if not newest_log or not winutil.process_running(LIVE_EXE):
+            return False
+        logs = vrclog.find_logs()
+        import os
+        return bool(logs) and os.path.basename(logs[-1]) == newest_log
 
     # ------------------------------------------------------------ building
 
@@ -278,13 +479,37 @@ class HomePage(QWidget):
         their colours into inline stylesheets, so a theme swapped while another
         page was open has to be picked up when this one comes back.
         """
+        # Not while nobody can see it. The app lives in the tray, Home stays
+        # the current page there, and every log pass during an evening in
+        # VRChat rebuilt it for nobody. It catches up when it is shown.
+        if not force and not self._on_screen():
+            self._dirty = True
+            return
+        self._dirty = False
         selfn = self.main.cfg.self_names
-        stamp = (self.main.db.home_stamp(selfn),
-                 style.PAL["bg"], self.main.cfg.get("accent"))
+        now = datetime.datetime.now()
+        photos, sessions = self.main.db.home_stamp(selfn)
+        live = self._live(sessions[-1])
+        # Two fingerprints. The page's: what the figures, shelves and lists
+        # read, plus today's date, because "on this day" is today -- without it
+        # the page reopened from the tray in the morning said "ON THIS DAY 22
+        # September" on the 23rd. The card's: the sessions, which move on every
+        # log pass while the game runs, the evening's date for its heading, and
+        # whether the game is live.
+        stamp = (photos, tuple(sorted(selfn)), style.PAL["bg"],
+                 self.main.cfg.get("accent"), datetime.date.today())
+        card_stamp = (sessions, (now - NIGHT_TURNS).date(), now.date(), live)
         if not force and stamp == self._shown:
+            if card_stamp != self._card_shown:
+                self._rebuild_card(selfn, now, live, card_stamp)
+            elif self._card is not None:
+                self._card.tick(now)
             return
         self._shown = stamp
+        self._card_shown = card_stamp
+        self._now, self._is_live = now, live
 
+        self._card = None
         while self.vbox.count():
             it = self.vbox.takeAt(0)
             if it.widget():
@@ -295,7 +520,7 @@ class HomePage(QWidget):
                                 fmt.human_size(size)))
 
         self._add_figures(total, size)
-        self._add_last_night(selfn)
+        self._add_sitting(selfn)
         self._add_shelf(self._memories_shelf())
         self._add_shelf(self._worlds_shelf())
         # The two lists go side by side because they are the same shape and
@@ -331,13 +556,43 @@ class HomePage(QWidget):
         rows = self.main.db.recent_worlds(limit=10000, min_photos=1)
         return len(rows)
 
-    def _add_last_night(self, selfn):
-        night = self.main.db.last_night(selfn)
-        if not night:
+    def _add_sitting(self, selfn):
+        sit = self.main.db.last_sitting(
+            selfn, until=self._now if self._is_live else None)
+        if not sit:
             return
-        f = self.main.db.query_photos(_day_filter(night["day"]))
-        night["shots"] = list(f)[:3]
-        self.vbox.addWidget(LastNight(self.main, self.cache, night))
+        self._card = SittingCard(self.main, self.cache, sit, self._is_live,
+                                 self._now, self._open_photos)
+        self.vbox.addWidget(self._card)
+
+    def _rebuild_card(self, selfn, now, live, card_stamp):
+        """Just the card, in its place. What changes every fifteen seconds while
+        the game runs is the evening, not the library."""
+        self._card_shown = card_stamp
+        self._now, self._is_live = now, live
+        old = self._card
+        idx = self.vbox.indexOf(old) if old is not None else 1  # after the figures
+        self._card = None
+        if old is not None:
+            self.vbox.removeWidget(old)
+            old.hide()
+            old.deleteLater()
+        sit = self.main.db.last_sitting(selfn, until=now if live else None)
+        if sit:
+            self._card = SittingCard(self.main, self.cache, sit, live, now,
+                                     self._open_photos)
+            self.vbox.insertWidget(max(0, idx), self._card)
+
+    def _open_photos(self, ids, pos):
+        """The sitting's photographs in the lightbox, starting at `pos`.
+
+        Not the day: a sitting that crosses midnight is two days, and the day
+        page for either of them is the wrong set of pictures."""
+        from .gridmodel import PhotoItem
+        rows = self.main.db.photos_by_ids_full(ids)
+        items = [PhotoItem(r) for r in rows]
+        if items:
+            self.main.open_lightbox(self, items, max(0, min(pos, len(items) - 1)))
 
     def _add_shelf(self, shelf):
         if shelf is not None:

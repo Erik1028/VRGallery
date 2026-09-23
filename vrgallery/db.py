@@ -882,61 +882,174 @@ class Database:
                     GROUP BY pp.name ORDER BY c DESC LIMIT ?""",
                 params + [limit]).fetchall()
 
-    def last_night(self, self_names=()):
-        """The most recent evening, summed up -- the home page's one live block.
+    # A sitting ends at the first break longer than this. The log keeps a row
+    # per instance visit, and a world hop, a crash-and-rejoin or a quick reload
+    # are all a few minutes apart; going to sleep and coming back is not.
+    # Measured on a month of logs: 60, 90, 120 and 180 minutes give 46, 40, 38
+    # and 38 sittings -- 90 is where the count stops being sensitive to it.
+    SITTING_GAP_MIN = 90
 
-        Session data comes from VRChat's own logs, which the game keeps about two
-        days of on disk, so this table only ever holds what the app was running
-        to see: 33 days at the time of writing, growing by one a day and not
-        backfillable. Every other block on the home page is therefore built from
-        photographs, which go back to the beginning. This one gets away with a
-        short window because it only ever asks for the LAST night, and that is
-        the one night a short window is guaranteed to hold.
+    def last_sitting(self, self_names=(), until=None):
+        """The most recent stretch of time in VRChat, summed up.
 
-        -> a row with day / stops / minutes / world / photos, or None.
+        NOT a calendar day. The first version of this grouped sessions by the
+        date they started on, and 24 of the 40 sittings in the logs cross
+        midnight: the tail of a night landed on the next date and was added to
+        that afternoon, so the card could report "9h 16m, 12 stops" for two
+        different evenings glued together. A sitting is instead a run of
+        sessions with no break longer than SITTING_GAP_MIN.
+
+        People who were still in the instance when the log ended have no leave
+        time -- VRChat writes nothing when you quit -- and they are usually the
+        ones who stayed longest. Their time runs to the end of the session
+        rather than being dropped, which is what the rest of the app already
+        does with a missing leave. While the game is running, that is everybody
+        in the room right now, and `present` says so.
+
+        People are keyed by user id where the log has one, so a friend who
+        changed display name mid-month is one person, shown under the latest
+        name. Your own rows are left out by name AND by the ids those names
+        carry, so a renamed you is still you.
+
+        `until` extends the photo window to now while a sitting is still going:
+        the log's last line is behind the screenshot you just took.
+
+        -> dict, or None when there are no sessions at all (a fresh install, or
+        a library whose logs were never seen -- the logs only reach back as far
+        as the app has been running).
         """
-        ex, params = "", []
-        if self_names:
-            ex = " AND sp.name NOT IN (%s)" % ",".join("?" * len(self_names))
-            params = list(self_names)
-        with self._lock:
-            last = self._conn.execute(
-                "SELECT substr(start_at,1,10) d FROM sessions "
-                "ORDER BY start_at DESC LIMIT 1").fetchone()
-            if not last:
+        from datetime import datetime as _dt, timedelta as _td
+
+        def when(s):
+            try:
+                return _dt.fromisoformat(s[:19])
+            except (TypeError, ValueError):
                 return None
-            day = last["d"]
-            row = self._conn.execute(
-                """SELECT COUNT(*) stops,
-                        SUM((julianday(end_at)-julianday(start_at))*24*60) mins,
-                        MIN(start_at) first_at, MAX(end_at) last_at
-                   FROM sessions WHERE substr(start_at,1,10)=? AND end_at IS NOT NULL""",
-                (day,)).fetchone()
-            world = self._conn.execute(
-                """SELECT world_id, world_name,
-                        SUM((julianday(end_at)-julianday(start_at))*24*60) m
-                   FROM sessions WHERE substr(start_at,1,10)=? AND end_at IS NOT NULL
-                   GROUP BY world_id ORDER BY m DESC LIMIT 1""", (day,)).fetchone()
-            people = self._conn.execute(
-                f"""SELECT sp.name,
-                        SUM((julianday(sp.leave_at)-julianday(sp.join_at))*24*60) m
-                    FROM session_players sp
-                    WHERE substr(sp.join_at,1,10)=? AND sp.leave_at IS NOT NULL{ex}
-                    GROUP BY sp.name ORDER BY m DESC LIMIT 5""",
-                [day] + params).fetchall()
-            pics = self._conn.execute(
-                "SELECT COUNT(*) c FROM photos WHERE day=? AND missing=0",
-                (day,)).fetchone()["c"]
-            sid = self._conn.execute(
-                "SELECT id FROM sessions WHERE substr(start_at,1,10)=? "
-                "ORDER BY start_at DESC LIMIT 1", (day,)).fetchone()
+
+        def span(a, b):
+            """Minutes from a to b. The log's times are local wall clock, so the
+            night the clocks go back a session inside the repeated hour ends
+            "before" it began, and clamping that to zero lost it and everybody
+            in it. A negative span of under an hour is that, and gets its hour
+            back. (A session that straddles the change still reads an hour
+            short: the log carries no zone, so there is nothing to tell by.)"""
+            d = (b - a).total_seconds() / 60
+            if -60 <= d < 0:
+                d += 60
+            return max(0.0, d)
+
+        with self._lock:
+            rows = self._conn.execute(
+                "SELECT id, log_file, world_id, world_name, instance_type, start_at, "
+                "COALESCE(end_at, start_at) end_at FROM sessions "
+                "WHERE start_at IS NOT NULL ORDER BY start_at DESC LIMIT 400").fetchall()
+            if not rows:
+                return None
+            sit = [rows[0]]
+            for r in rows[1:]:
+                gap = (when(sit[-1]["start_at"]) - when(r["end_at"])).total_seconds() / 60
+                if gap > self.SITTING_GAP_MIN:
+                    break
+                sit.append(r)
+            sit.reverse()                                  # oldest first
+            ids = [r["id"] for r in sit]
+            q = ",".join("?" * len(ids))
+            last = sit[-1]
+            start = when(sit[0]["start_at"])
+            end = max(when(r["end_at"]) for r in sit)
+
+            worlds = {}
+            mins = 0.0
+            for r in sit:
+                m = span(when(r["start_at"]), when(r["end_at"]))
+                mins += m
+                key = r["world_id"] or r["world_name"] or "?"
+                w = worlds.setdefault(key, [r["world_id"], r["world_name"] or "", 0.0])
+                w[2] += m
+                if r["world_name"]:
+                    w[1] = r["world_name"]                 # the latest name wins
+
+            players = self._conn.execute(
+                f"""SELECT sp.name, sp.user_id, sp.join_at, sp.leave_at, sp.session_id,
+                        COALESCE(s.end_at, s.start_at) s_end
+                    FROM session_players sp JOIN sessions s ON s.id=sp.session_id
+                    WHERE sp.session_id IN ({q})""", ids).fetchall()
+            selfn = set(self_names)
+            self_ids = {p["user_id"] for p in players
+                        if p["name"] in selfn and p["user_id"]}
+            people = {}
+            for p in players:
+                if p["name"] in selfn or (p["user_id"] and p["user_id"] in self_ids):
+                    continue
+                j = when(p["join_at"])
+                l = when(p["leave_at"]) or when(p["s_end"])
+                if j is None or l is None:
+                    continue
+                key = p["user_id"] or ("name:" + p["name"])
+                d = people.setdefault(key, {"name": p["name"], "user_id": p["user_id"],
+                                            "minutes": 0.0, "present": False,
+                                            "_seen": j})
+                d["minutes"] += span(j, l)
+                if j >= d["_seen"]:
+                    d["_seen"], d["name"] = j, p["name"]
+                if p["session_id"] == last["id"] and p["leave_at"] is None:
+                    d["present"] = True
+            # By time together. "Present" is NOT a sort key here: for a sitting
+            # that is over it only means "still in the room when the log ended",
+            # and sorting on it put somebody with 160 minutes behind five people
+            # with under an hour. The page puts present people first itself, and
+            # only while the game is actually running.
+            ranked = sorted(people.values(), key=lambda d: -d["minutes"])
+            keep = ranked[:8] + [d for d in ranked[8:] if d["present"]][:8]
+            for d in ranked:
+                d.pop("_seen", None)
+                d["photo_name"] = None
+            ranked = keep
+            for d in ranked:
+                # the name the person page knows them by, if they are in any
+                # photograph at all -- a chip for somebody who is not opens an
+                # empty grid, which reads as a broken library
+                # By id first, so a friend photographed under an older name
+                # still gets a link; then by name, because photo metadata from
+                # before ids were recorded -- or from another tool -- has none.
+                r = None
+                if d["user_id"]:
+                    r = self._conn.execute(
+                        "SELECT pp.name FROM photo_players pp JOIN photos ph "
+                        "ON ph.id=pp.photo_id WHERE pp.user_id=? AND ph.missing=0 "
+                        "ORDER BY ph.taken_at DESC LIMIT 1", (d["user_id"],)).fetchone()
+                if r is None:
+                    r = self._conn.execute(
+                        "SELECT pp.name FROM photo_players pp JOIN photos ph "
+                        "ON ph.id=pp.photo_id WHERE pp.name=? AND ph.missing=0 LIMIT 1",
+                        (d["name"],)).fetchone()
+                d["photo_name"] = r["name"] if r else None
+
+            hi = max(end, until) if until else end
+            lo_s = start.isoformat()
+            hi_s = (hi + _td(minutes=10)).isoformat()
+            photo_ids = [r["id"] for r in self._conn.execute(
+                f"""SELECT id FROM photos WHERE missing=0 AND is_video=0
+                    AND (session_id IN ({q}) OR (taken_at >= ? AND taken_at <= ?))
+                    ORDER BY taken_at""", ids + [lo_s, hi_s])]
+
+            avatar = None
+            if selfn:
+                sq = ",".join("?" * len(selfn))
+                r = self._conn.execute(
+                    f"SELECT avatar FROM avatar_events WHERE player IN ({sq}) "
+                    f"AND at >= ? AND at <= ? ORDER BY at DESC LIMIT 1",
+                    list(selfn) + [lo_s, hi_s]).fetchone()
+                avatar = r["avatar"] if r else None
+
         return {
-            "day": day, "stops": row["stops"] or 0, "mins": row["mins"] or 0,
-            "first_at": row["first_at"], "last_at": row["last_at"],
-            "world_id": world["world_id"] if world else None,
-            "world_name": (world["world_name"] if world else "") or "",
-            "people": [(p["name"], p["m"] or 0) for p in people],
-            "photos": pics, "session_id": sid["id"] if sid else None,
+            "start": start, "end": end, "mins": mins, "sessions": len(sit),
+            "log_file": last["log_file"], "instance_type": last["instance_type"] or "",
+            "world_id": last["world_id"], "world_name": last["world_name"] or "",
+            "worlds": sorted(([w[0], w[1], w[2]] for w in worlds.values()),
+                             key=lambda w: -w[2]),
+            "people": ranked, "people_total": len(people),
+            "photo_ids": photo_ids, "avatar": avatar,
         }
 
     def recent_worlds(self, limit=5, min_photos=3):
@@ -962,9 +1075,27 @@ class Database:
             a = self._conn.execute(
                 "SELECT COUNT(*) c, MAX(taken_at) m, COALESCE(SUM(filesize),0) b "
                 "FROM photos WHERE missing=0").fetchone()
+            # MAX(end_at) and the filled-in leaves, not just the session count:
+            # an evening spent in one instance adds no session at all, it only
+            # makes the last one longer and fills in who left. With the count
+            # alone the card froze at whatever it said when first drawn.
             b = self._conn.execute(
-                "SELECT COUNT(*) c, MAX(start_at) m FROM sessions").fetchone()
-        return (a["c"], a["m"], a["b"], b["c"], b["m"], tuple(sorted(self_names)))
+                "SELECT COUNT(*) c, MAX(start_at) m, MAX(end_at) e FROM sessions").fetchone()
+            c = self._conn.execute(
+                "SELECT COUNT(*) c, COUNT(leave_at) l FROM session_players").fetchone()
+            d = self._conn.execute("SELECT COUNT(*) c FROM avatar_events").fetchone()
+            f = self._conn.execute(
+                "SELECT log_file FROM sessions ORDER BY start_at DESC LIMIT 1").fetchone()
+        # Two parts, because they change at very different rates. The session
+        # part moves on EVERY log pass while the game runs -- every fifteen
+        # seconds or so -- and folded into one fingerprint it rebuilt the whole
+        # page each time, thumbnails and all, to change one card. The page
+        # rebuilds on the photo part; the session part only rebuilds the card.
+        # The newest session's log file goes LAST in it on purpose: the page
+        # compares that with the log the game is writing to decide "live".
+        return ((a["c"], a["m"], a["b"]),
+                (b["c"], b["m"], b["e"], c["c"], c["l"], d["c"],
+                 f["log_file"] if f else None))
 
     def random_rich_day(self, min_photos=5):
         with self._lock:

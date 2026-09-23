@@ -491,3 +491,47 @@ def open_file(path):
         os.startfile(path)
     except OSError:
         pass
+
+
+class _PROCESSENTRY32W(ctypes.Structure):
+    _fields_ = [("dwSize", wintypes.DWORD), ("cntUsage", wintypes.DWORD),
+                ("th32ProcessID", wintypes.DWORD), ("th32DefaultHeapID", ctypes.c_size_t),
+                ("th32ModuleID", wintypes.DWORD), ("cntThreads", wintypes.DWORD),
+                ("th32ParentProcessID", wintypes.DWORD), ("pcPriClassBase", wintypes.LONG),
+                ("dwFlags", wintypes.DWORD), ("szExeFile", wintypes.WCHAR * 260)]
+
+
+def process_running(exe_name):
+    """Is a process with this image name running? Case-insensitive, no psutil.
+
+    A process snapshot rather than `tasklist`: this runs once a minute while the
+    home page is up, and spawning a console process that often would flash on
+    some setups and costs tens of milliseconds a time. The snapshot is about one.
+    Any failure answers False -- the only caller uses it to decide whether to
+    say "right now", and a false "no" just shows the last sitting instead.
+    """
+    if os.name != "nt":
+        return False
+    k32 = ctypes.windll.kernel32
+    k32.CreateToolhelp32Snapshot.restype = wintypes.HANDLE
+    k32.CreateToolhelp32Snapshot.argtypes = [wintypes.DWORD, wintypes.DWORD]
+    k32.Process32FirstW.argtypes = [wintypes.HANDLE, ctypes.POINTER(_PROCESSENTRY32W)]
+    k32.Process32NextW.argtypes = [wintypes.HANDLE, ctypes.POINTER(_PROCESSENTRY32W)]
+    k32.CloseHandle.argtypes = [wintypes.HANDLE]
+    snap = k32.CreateToolhelp32Snapshot(0x2, 0)          # TH32CS_SNAPPROCESS
+    if not snap or snap == wintypes.HANDLE(-1).value:
+        return False
+    want = exe_name.lower()
+    try:
+        entry = _PROCESSENTRY32W()
+        entry.dwSize = ctypes.sizeof(_PROCESSENTRY32W)
+        ok = k32.Process32FirstW(snap, ctypes.byref(entry))
+        while ok:
+            if entry.szExeFile.lower() == want:
+                return True
+            ok = k32.Process32NextW(snap, ctypes.byref(entry))
+        return False
+    except Exception:
+        return False
+    finally:
+        k32.CloseHandle(snap)

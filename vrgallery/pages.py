@@ -775,7 +775,9 @@ class ThumbStripLabel(QWidget):
         p.end()
 
     def mouseReleaseEvent(self, ev):
-        if ev.button() == Qt.LeftButton and self._on_click:
+        # released over the tile: pressing and dragging off it is how you
+        # change your mind, and it used to open the photo anyway
+        if ev.button() == Qt.LeftButton and self._on_click                 and self.rect().contains(ev.position().toPoint()):
             self._on_click()
         super().mouseReleaseEvent(ev)
 
@@ -835,7 +837,9 @@ class MoreTile(QWidget):
         p.end()
 
     def mouseReleaseEvent(self, ev):
-        if ev.button() == Qt.LeftButton and self._on_click:
+        # released over the tile, as the thumbnails beside it now require
+        if ev.button() == Qt.LeftButton and self._on_click \
+                and self.rect().contains(ev.position().toPoint()):
             self._on_click()
         super().mouseReleaseEvent(ev)
 
@@ -866,6 +870,7 @@ class ThumbStrip(QWidget):
         self._h = 88               # can afford to be tall
         self._more = None          # the "+N" in the last slot, built on demand
         self._on_more = None       # where it goes: wherever the row goes
+        self._extra = 0            # photographs "+N" stands for beyond the tiles
 
     def add(self, main, cache, item, on_click):
         self._tiles.append(ThumbStripLabel(main, cache, item, on_click, parent=self))
@@ -887,6 +892,16 @@ class ThumbStrip(QWidget):
     def count(self):
         return len(self._tiles)
 
+    def set_more(self, on_click, extra=0):
+        """Where "+N" goes, and how many photographs it stands for beyond the
+        tiles actually added -- so a caller can build only the few tiles that
+        could ever be on screen and still have the count come out true."""
+        self._on_more = on_click
+        self._extra = max(0, int(extra))
+        if self._more is not None:
+            self._more._on_click = on_click
+        self._relayout()
+
     def _relayout(self):
         n = len(self._tiles)
         if not n:
@@ -900,8 +915,9 @@ class ThumbStrip(QWidget):
         # this out FIRST: clamping the width without clamping the count is what
         # made the row overflow its own widget.
         slots = max(1, int((avail + self.GAP) // (self.MIN_W + self.GAP)))
-        show = n if n <= slots else max(1, slots - 1)   # the last slot says "+N"
-        hidden = n - show
+        total = n + self._extra
+        show = n if total <= slots else max(1, min(n, slots - 1))  # last slot: "+N"
+        hidden = total - show
         cells = show + (1 if hidden else 0)
         fill = (avail - self.GAP * (cells - 1)) / cells
         # enough photos and the row fills exactly; a lone one grows only to the

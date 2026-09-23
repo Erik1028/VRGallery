@@ -10,6 +10,12 @@ from PySide6.QtWidgets import QListView, QStyle, QStyledItemDelegate, QAbstractI
 
 from . import fmt, icons, style
 
+try:
+    from shiboken6 import isValid as _alive     # is the C++ half still there?
+except ImportError:                             # pragma: no cover
+    def _alive(_w):
+        return True
+
 KindRole = Qt.UserRole + 1
 ItemRole = Qt.UserRole + 2
 
@@ -74,8 +80,17 @@ class ThumbCache(QObject):
         bridge.thumb_ready.connect(self._on_ready)
 
     def watch(self, pid, widget):
-        """Register a widget to repaint when this one photo's thumbnail lands."""
-        self._watchers.setdefault(pid, []).append(widget)
+        """Register a widget to repaint when this one photo's thumbnail lands.
+
+        Dead ones are dropped here as well as on delivery. Delivery alone was
+        not enough: a thumbnail already in memory is never delivered again, so a
+        page that rebuilds often -- Home, while the game is running -- added a
+        wrapper per tile per rebuild and none of them ever left.
+        """
+        lst = self._watchers.setdefault(pid, [])
+        if lst:
+            lst[:] = [w for w in lst if _alive(w)]
+        lst.append(widget)
 
     def _notify_watchers(self, pid):
         widgets = self._watchers.get(pid)
