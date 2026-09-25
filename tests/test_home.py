@@ -780,3 +780,162 @@ def test_one_photograph_does_not_float_mid_card(app, tmp_path):
         win.close()
         win.deleteLater()
         app.processEvents()
+
+
+# ------------------------------------------------------- the pill in the title bar
+#
+# Where you are in VRChat, on every page (2026-09-25): the one piece of
+# Mixtape's design Erik asked for. It reads the same three things the Home card
+# reads, and these hold the parts of it that are easy to break unseen: which of
+# its two states it is in, that a press on it is a click and not a window drag,
+# and that it keeps up without redrawing the world every minute.
+
+def _game(monkeypatch, running, log="l.txt"):
+    from vrgallery import homepage
+    monkeypatch.setattr(homepage.winutil, "process_running", lambda _n: running)
+    monkeypatch.setattr(homepage.vrclog, "find_logs", lambda: [os.path.join(r"C:\x", log)])
+
+
+def _nbsp(s):
+    return s.replace("\u00a0", " ")
+
+
+def test_the_pill_says_where_you_are_while_the_game_runs(home, monkeypatch):
+    win, _page = home
+    pill = win.live_pill
+    _game(monkeypatch, True)
+    pill.refresh(force=True)
+    assert not pill.isHidden()
+    assert pill._title.text() == "In VRChat · World 1"
+    assert not pill._dot.isHidden(), "live, and no green dot"
+    sub = _nbsp(pill._sub.text())
+    assert sub.startswith("Friends · "), sub
+    assert "in-world" in sub and "so far" not in sub
+
+
+def test_between_sessions_it_says_where_you_were_last(home, monkeypatch):
+    """Dimmer, with the sitting's own heading in sentence case. The card's
+    headings are capitals ("MARCH 18"); a title-bar line in capitals shouts."""
+    win, _page = home
+    pill = win.live_pill
+    _game(monkeypatch, False)
+    pill.refresh(force=True)
+    assert not pill.isHidden(), "gone between sessions: the title bar would jump"
+    assert pill._title.text() == "Last in VRChat · World 1"
+    assert pill._dot.isHidden()
+    bits = _nbsp(pill._sub.text()).split(" · ")
+    assert bits[0] == "March 18", bits
+    assert bits[1] == "4h 30m in-world", bits
+    assert bits[2] == "4 photos", bits
+
+
+def test_a_library_with_no_sessions_has_no_pill(app, tmp_path):
+    cfg, db = _library(tmp_path, sessions=False)
+    win = _window(app, cfg, db)
+    try:
+        win.live_pill.refresh(force=True)
+        assert win.live_pill.isHidden(), "a pill with nothing to say"
+    finally:
+        win._quitting = True
+        win.close()
+
+
+def test_a_press_on_the_pill_is_a_click_not_a_window_drag(home):
+    """The title bar turns every press nobody claims into startSystemMove, and
+    the system move eats the release a click needs: the pill looked like a
+    button and dragged the window instead."""
+    from PySide6.QtCore import QEvent, QPointF, Qt
+    from PySide6.QtGui import QMouseEvent
+    win, _page = home
+    pill = win.live_pill
+    pill.refresh(force=True)
+    pos = QPointF(pill.width() / 2, pill.height() / 2)
+    ev = QMouseEvent(QEvent.MouseButtonPress, pos, pill.mapToGlobal(pos),
+                     Qt.LeftButton, Qt.LeftButton, Qt.NoModifier)
+    ev.ignore()          # as the title bar would leave it; the pill has to claim it
+    pill.mousePressEvent(ev)
+    assert ev.isAccepted(), "the press falls through to the title bar's drag"
+
+
+def test_a_click_on_the_pill_opens_home(home):
+    from PySide6.QtCore import Qt
+    from PySide6.QtTest import QTest
+    win, page = home
+    pill = win.live_pill
+    pill.refresh(force=True)
+    win.activate("all")
+    QApplication.instance().processEvents()
+    QTest.mouseClick(pill, Qt.LeftButton)
+    assert win.stack.currentWidget() is page
+
+
+def test_the_pill_is_refreshed_whichever_page_is_open(home):
+    """It is on every page; Home's own refresh only runs while Home is open."""
+    win, _page = home
+    win.activate("all")
+    calls = []
+    real = win.live_pill.refresh
+    win.live_pill.refresh = lambda *a, **k: (calls.append(1), real(*a, **k))[1]
+    try:
+        win.after_photos_changed()
+    finally:
+        win.live_pill.refresh = real
+    assert calls, "an index pass landed and the pill was not told"
+
+
+def test_a_quiet_minute_only_moves_the_pills_clock(home, monkeypatch):
+    import datetime as dt
+    win, _page = home
+    pill = win.live_pill
+    _game(monkeypatch, True)
+    pill.refresh(force=True)
+    painted = []
+    real_paint = pill._paint_state
+    pill._paint_state = lambda: (painted.append(1), real_paint())[1]
+    pill.refresh()
+    assert not painted, "an unchanged pill was redrawn"
+    before = _nbsp(pill._sub.text())
+    pill.tick(dt.datetime.now() + dt.timedelta(minutes=75))
+    assert _nbsp(pill._sub.text()) != before, "live, and the time in-world stood still"
+
+
+def test_the_game_starting_redraws_the_pill(home, monkeypatch):
+    """Live is in the pill's fingerprint: the log has not grown yet when the
+    game starts, so the sessions alone would leave it saying "Last in"."""
+    win, _page = home
+    pill = win.live_pill
+    _game(monkeypatch, False)
+    pill.refresh(force=True)
+    _game(monkeypatch, True)
+    pill.refresh()
+    assert pill._title.text().startswith("In VRChat")
+
+
+def test_the_pill_waits_while_the_window_is_hidden(home, monkeypatch):
+    win, _page = home
+    pill = win.live_pill
+    _game(monkeypatch, False)
+    pill.refresh(force=True)
+    win.hide()
+    QApplication.instance().processEvents()
+    _game(monkeypatch, True)
+    pill.refresh()
+    assert pill._dirty and pill._title.text().startswith("Last in"), "worked while hidden"
+    win.show()
+    for _ in range(20):
+        QApplication.instance().processEvents()
+    assert not pill._dirty and pill._title.text().startswith("In VRChat"), \
+        "did not catch up when the window came back"
+
+
+def test_the_pill_fits_inside_the_title_bar(home):
+    from vrgallery.homepage import LivePill
+    from vrgallery.widgets import TitleBar
+    win, _page = home
+    pill = win.live_pill
+    pill.refresh(force=True)
+    QApplication.instance().processEvents()
+    assert LivePill.HEIGHT <= TitleBar.HEIGHT - 4
+    top = pill.mapTo(win.titlebar, pill.rect().topLeft()).y()
+    assert top >= 0 and top + pill.height() <= win.titlebar.height(), (
+        "the pill spills out of the title bar")

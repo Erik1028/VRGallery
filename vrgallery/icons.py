@@ -157,27 +157,72 @@ def qicon(name, color, px=20, dpr=2.0, width=2.0, fill=None, pad=0):
     return ic
 
 
-# The app mark, in the same 120-unit space the icon family generator uses, so the
-# in-app logo and the shipped .ico are literally the same drawing.
-APP_TILE_SVG = (
-    '<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 120 120"><defs>'
-    '<linearGradient id="g" x1="0" y1="0" x2="1" y2="1">'
-    '<stop offset="0" stop-color="{g0}"/><stop offset="0.55" stop-color="{g1}"/>'
-    '<stop offset="1" stop-color="{g2}"/></linearGradient>'
-    '<linearGradient id="gl" x1="0" y1="0" x2="0" y2="1">'
-    '<stop offset="0" stop-color="#ffffff" stop-opacity="0.32"/>'
-    '<stop offset="1" stop-color="#ffffff" stop-opacity="0"/></linearGradient></defs>'
-    '<rect width="120" height="120" rx="30" fill="url(#g)"/>'
-    '<rect x="8" y="8" width="104" height="46" rx="24" fill="url(#gl)"/>'
-    # The same camera tools/make_icon.py draws on the small .ico tiles, at the
-    # same 82% of the square, so the fallback and the shipped icon are one mark.
-    # Two shapes and a heavy stroke on purpose: see the note beside CAMERA_SVG.
-    '<g transform="translate(10.8 10.8) scale(0.82)" fill="none" stroke="#ffffff"'
-    ' stroke-width="11" stroke-linejoin="round" stroke-linecap="round">'
-    '<path d="M14 44a8 8 0 0 1 8 -8h14l7 -10h34l7 10h14a8 8 0 0 1 8 8v48'
-    'a8 8 0 0 1 -8 8H22a8 8 0 0 1 -8 -8z"/>'
-    '<circle cx="60" cy="64" r="16" fill="#ffffff" stroke="none"/></g></svg>'
-)
+# The app mark: a compact camera on a gradient tile, in the manner of Mixtape's
+# cassette -- a black body, a cream detail, a band running across it, a lens with
+# a white ring where the cassette has its white hubs. Erik picked it from three
+# drawn in that language (2026-09-25).
+#
+# This is the ONE copy of the drawing. tools/make_icon.py imports it for the
+# small .ico entries and the mark PNG, and _drawn_logo renders it when the assets
+# are missing, so the icon in the taskbar and the logo in the sidebar cannot
+# drift apart the way they once did (the fallback used to draw a chat balloon).
+#
+# Two versions. `detail` is for 64 px and up. The small one, for 48 and below,
+# thickens the band and the lens and trades the lens's inner ring and glint for
+# a single dot, because at 16 px only three things survive: the dark body
+# against the bright tile, the band, and the white ring.
+_MARK_DEFS = (
+    '<defs>'
+    '<linearGradient id="tile" x1="0" y1="0" x2="1" y2="1">'
+    '<stop offset="0" stop-color="#35d6bf"/><stop offset="0.55" stop-color="#1596c9"/>'
+    '<stop offset="1" stop-color="#0f5f8e"/></linearGradient>'
+    '<radialGradient id="shade" cx="0.5" cy="0.5" r="0.75">'
+    '<stop offset="0.6" stop-color="#000" stop-opacity="0"/>'
+    '<stop offset="1" stop-color="#000" stop-opacity="0.18"/></radialGradient>'
+    '<linearGradient id="body" x1="0" y1="0" x2="0" y2="1">'
+    '<stop offset="0" stop-color="#2a2c33"/><stop offset="0.18" stop-color="#121317"/>'
+    '<stop offset="1" stop-color="#08090b"/></linearGradient>'
+    '<linearGradient id="band" x1="0" y1="0" x2="1" y2="0">'
+    '<stop offset="0" stop-color="#4f9be6"/><stop offset="1" stop-color="#6a45b8"/>'
+    '</linearGradient>'
+    '<radialGradient id="glass" cx="0.42" cy="0.38" r="0.7">'
+    '<stop offset="0" stop-color="#3b5c8c"/><stop offset="0.45" stop-color="#16233b"/>'
+    '<stop offset="1" stop-color="#05070b"/></radialGradient>'
+    '</defs>')
+
+
+def app_mark_svg(detail=True):
+    """The whole app tile as an SVG document, 256 units square."""
+    cx, cy = 128, 134
+    r = 52 if detail else 56
+    band_y, band_h = (112, 26) if detail else (108, 34)
+    lens = ('<circle cx="%s" cy="%s" r="%s" fill="#07080a"/>'
+            '<circle cx="%s" cy="%s" r="%s" fill="#f5f4ee"/>'
+            '<circle cx="%s" cy="%s" r="%s" fill="url(#glass)"/>'
+            % (cx, cy, r, cx, cy, r * 0.80, cx, cy, r * 0.66))
+    if detail:
+        gx, gy = cx - r * 0.24, cy - r * 0.26
+        lens += ('<circle cx="%s" cy="%s" r="%s" fill="#0a0e16"/>'
+                 '<ellipse cx="%s" cy="%s" rx="%s" ry="%s" fill="#ffffff" '
+                 'fill-opacity="0.85" transform="rotate(-35 %s %s)"/>'
+                 % (cx, cy, r * 0.30, gx, gy, r * 0.16, r * 0.10, gx, gy))
+    else:
+        lens += ('<circle cx="%s" cy="%s" r="%s" fill="#ffffff" fill-opacity="0.9"/>'
+                 % (cx - r * 0.22, cy - r * 0.24, r * 0.15))
+    return (
+        '<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 256 256">'
+        + _MARK_DEFS
+        + '<rect width="256" height="256" rx="58" fill="url(#tile)"/>'
+        '<rect width="256" height="256" rx="58" fill="url(#shade)"/>'
+        '<rect x="150" y="54" width="44" height="16" rx="7" fill="#2b2d33"/>'     # shutter
+        '<rect x="24" y="64" width="208" height="140" rx="40" fill="url(#body)"/>'
+        '<rect x="24" y="%d" width="208" height="%d" fill="url(#band)"/>' % (band_y, band_h)
+        + '<rect x="44" y="82" width="34" height="16" rx="5" fill="#f3eedb"/>'   # flash
+        + lens + '</svg>')
+
+
+# kept for anything that still asks for the tile by its old name
+APP_TILE_SVG = app_mark_svg(True)
 
 
 _LOGO_CACHE = {}
@@ -208,12 +253,10 @@ def logo_pixmap(px, dpr=1.0, grad=None, cut=None):
 
 
 def _drawn_logo(px, dpr=1.0, grad=None, cut=None):
-    """The app tile: gradient squircle, gloss, and the camera mark."""
-    from . import style
-    grad = grad or style.ICON_GRAD
-    svg = APP_TILE_SVG.format(g0=grad[0], g1=grad[1], g2=grad[2],
-                              cut=cut or style.ICON_CUT)
+    """The app tile, drawn: the same mark as the shipped icon. `grad` and `cut`
+    belonged to the chat-balloon mark this replaced and are ignored."""
     size = max(1, int(px * dpr))
+    svg = app_mark_svg(detail=size >= 64)
     r = QSvgRenderer(QByteArray(svg.encode("utf-8")))
     pm = QPixmap(size, size)
     pm.fill(Qt.transparent)
