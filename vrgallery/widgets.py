@@ -1385,7 +1385,9 @@ class TitleBar(QFrame):
     window.
     """
 
-    HEIGHT = 28          # slim: it holds three buttons, not a title
+    # Tall enough for the live pill in its middle (44 px and a margin). It was
+    # 28 when it held nothing but the three window buttons.
+    HEIGHT = 52
 
     def __init__(self, window):
         super().__init__(window)
@@ -1404,6 +1406,13 @@ class TitleBar(QFrame):
         self.btn_close = self._chrome("x", "Close", window.close, danger=True)
         for b in (self.btn_min, self.btn_max, self.btn_close):
             lay.addWidget(b)
+
+    def set_center(self, widget):
+        """Put something in the middle of the bar, between the title and the
+        window buttons -- the live pill."""
+        lay = self.layout()
+        lay.insertWidget(2, widget, 0, Qt.AlignVCenter)
+        lay.insertStretch(3, 1)
 
     def _chrome(self, icon, tip, slot, danger=False):
         b = QPushButton()

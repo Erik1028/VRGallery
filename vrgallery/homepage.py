@@ -22,6 +22,7 @@ holds. A block with nothing to say hides itself rather than rendering an empty
 frame.
 """
 import datetime
+import os
 
 from PySide6.QtCore import Qt, QTimer
 from PySide6.QtWidgets import (QFrame, QHBoxLayout, QLabel, QSizePolicy,
@@ -205,6 +206,24 @@ def sitting_label(start, end, live, now):
     # a plain date is the START's date, as the line under it is: "SEPTEMBER 18"
     # over "Saturday · September 19 · 00:30" was one sitting with two dates
     return "%s %d" % (fmt.MONTHS[start.month - 1].upper(), start.day)
+
+
+def is_live(newest_log):
+    """Is the game running, and is the newest session in the library the one it
+    is writing? Both: the game alone would call a sitting from yesterday "right
+    now" in the seconds between the game starting and the log pass catching up.
+    Shared by the Home card and the title bar, so the two can never disagree."""
+    if not newest_log or not winutil.process_running(LIVE_EXE):
+        return False
+    logs = vrclog.find_logs()
+    return bool(logs) and os.path.basename(logs[-1]) == newest_log
+
+
+def live_minutes(sit, now):
+    """In-world time of a sitting that is still going: what the log has, plus
+    the session running since its last line. Not "now - start", which counted
+    the gaps between game restarts that a sitting takes in."""
+    return sit["mins"] + max(0.0, (now - sit["end"]).total_seconds() / 60)
 
 
 def _span(minutes):
@@ -392,8 +411,7 @@ class SittingCard(QFrame):
             # "now - start" counted the gaps too -- a sitting takes in restarts
             # up to 90 minutes apart -- and one read 8h 17m live and 6h 34m a
             # minute after quitting.
-            live_m = sit["mins"] + max(0.0, (now - end).total_seconds() / 60)
-            bits.append("%s in-world so far" % _span(live_m))
+            bits.append("%s in-world so far" % _span(live_minutes(sit, now)))
             kind = vrclog.INSTANCE_LABELS.get(sit["instance_type"], "")
             if kind:
                 bits.append(kind)
@@ -464,11 +482,7 @@ class HomePage(QWidget):
         one it is writing? Both, or the card would call a sitting from yesterday
         "right now" in the seconds between the game starting and the log pass
         catching up."""
-        if not newest_log or not winutil.process_running(LIVE_EXE):
-            return False
-        logs = vrclog.find_logs()
-        import os
-        return bool(logs) and os.path.basename(logs[-1]) == newest_log
+        return is_live(newest_log)
 
     # ------------------------------------------------------------ building
 
@@ -743,3 +757,164 @@ def _gap_label(days):
 def _day_filter(day):
     from .db import PhotoFilter
     return PhotoFilter(day=day, sort_desc=False)
+
+
+class LivePill(Clickable):
+    """Where you are in VRChat, in the title bar, on every page.
+
+    Mixtape keeps a now-playing pill in its caption strip; this is VR Gallery's.
+    Erik asked for this one piece of Mixtape's design and nothing else of it
+    (2026-09-25). While the game runs it says so in the green the Home card
+    uses -- the world, the instance, in-world time so far, the photographs --
+    and between sessions it says, dimmer, where you were last. It is there in
+    both states on purpose: gone whenever the game was closed, the title bar
+    would change height each time VRChat started or stopped and every page
+    under it would jump.
+
+    It reads exactly what the Home card reads (last_sitting, is_live,
+    live_minutes), so the two cannot tell different stories. A click opens Home.
+    """
+
+    HEIGHT = 44
+
+    def __init__(self, main, parent=None):
+        super().__init__(lambda: main.activate("home"), parent)
+        self.main = main
+        self.setObjectName("LivePill")
+        self.setFixedHeight(self.HEIGHT)
+        self.setMinimumWidth(240)
+        self.setMaximumWidth(380)
+        self.setSizePolicy(QSizePolicy.Expanding, QSizePolicy.Fixed)
+        lay = QHBoxLayout(self)
+        lay.setContentsMargins(5, 5, 12, 5)
+        lay.setSpacing(10)
+        self._tile = QLabel()
+        self._tile.setFixedSize(34, 34)
+        lay.addWidget(self._tile)
+        col = QVBoxLayout()
+        col.setSpacing(0)
+        self._title = widgets.ElidedLabel("")
+        self._sub = widgets.ElidedLabel("")
+        col.addWidget(self._title)
+        col.addWidget(self._sub)
+        lay.addLayout(col, 1)
+        self._dot = QLabel("●")
+        lay.addWidget(self._dot)
+        self._key = None
+        self._sit = None
+        self._live = False
+        self._dirty = False
+        self._clock = QTimer(self)
+        self._clock.setInterval(60000)
+        self._clock.timeout.connect(self.refresh)
+        self.hide()                  # until there is a sitting to talk about
+
+    # a press here is a click on the pill, not the start of a window drag: the
+    # title bar under it turns every unclaimed press into startSystemMove, and
+    # the system move swallows the release the click needs
+    def mousePressEvent(self, ev):
+        if ev.button() == Qt.LeftButton:
+            ev.accept()
+            return
+        super().mousePressEvent(ev)
+
+    def showEvent(self, ev):
+        super().showEvent(ev)
+        self._clock.start()
+
+    def hideEvent(self, ev):
+        self._clock.stop()
+        super().hideEvent(ev)
+
+    def _sync(self):
+        self.setStyleSheet(
+            "QFrame#LivePill { background:%s; border:1px solid %s; border-radius:10px; }"
+            % (style.PAL["hover"] if self._hover else style.PAL["surface"],
+               style.PAL["border"]))
+
+    def refresh(self, force=False):
+        win = self.window()
+        if not force and (not win.isVisible() or win.isMinimized()):
+            self._dirty = True
+            return
+        self._dirty = False
+        now = datetime.datetime.now()
+        selfn = self.main.cfg.self_names
+        _photos, sessions = self.main.db.home_stamp(selfn)
+        live = is_live(sessions[-1])
+        key = (sessions, live, (now - NIGHT_TURNS).date(), now.date(),
+               style.PAL["bg"])
+        if not force and key == self._key:
+            self.tick(now)
+            return
+        self._key = key
+        sit = self.main.db.last_sitting(selfn, until=now if live else None)
+        if not sit:
+            self._sit = None
+            self.hide()
+            return
+        self._sit, self._live = sit, live
+        self._paint_state()
+        self.tick(now)
+        self.show()
+
+    def _paint_state(self):
+        live = self._live
+        sit = self._sit
+        tone = style.PAL["ok"] if live else style.PAL["surface2"]
+        glyph = "#ffffff" if live else style.PAL["dim"]
+        self._tile.setPixmap(_tile_pixmap("globe", 34, tone, glyph, self.devicePixelRatioF()))
+        where = (sit["world_name"] if live else (sit["worlds"][0][1] if sit["worlds"] else "")) \
+            or "somewhere"
+        self._title.setText(("In VRChat · " if live else "Last in VRChat · ") + where)
+        self._title.setStyleSheet("color:%s; font-size:13px; font-weight:600;"
+                                  % style.PAL["text" if live else "dim"])
+        self._sub.setStyleSheet("color:%s; font-size:11px;" % style.PAL["faint"])
+        self._dot.setVisible(live)
+        self._dot.setStyleSheet("color:%s; font-size:10px;" % style.PAL["ok"])
+        self.setToolTip("Open Home")
+        self._sync()
+
+    def tick(self, now):
+        """The line that depends on the clock. One label."""
+        sit = self._sit
+        if sit is None:
+            return
+        n = len(sit["photo_ids"])
+        if self._live:
+            bits = [vrclog.INSTANCE_LABELS.get(sit["instance_type"], ""),
+                    "%s in-world" % _span(live_minutes(sit, now))]
+        else:
+            when = sitting_label(sit["start"], sit["end"], False, now)
+            bits = [when[:1] + when[1:].lower(), "%s in-world" % _span(sit["mins"])]
+        if n:
+            bits.append("%d %s" % (n, fmt.plural(n, "photo")))
+        self._sub.setText(" · ".join(b for b in bits if b))
+
+
+def _tile_pixmap(icon_name, size, colour, glyph_colour, dpr):
+    """A rounded colour tile with one glyph on it, drawn at the screen's DPR."""
+    from PySide6.QtCore import QRectF
+    from PySide6.QtGui import QColor, QLinearGradient, QPainter, QPainterPath, QPixmap
+    px = int(size * dpr)
+    pm = QPixmap(px, px)
+    pm.fill(Qt.transparent)
+    p = QPainter(pm)
+    p.setRenderHint(QPainter.Antialiasing, True)
+    path = QPainterPath()
+    path.addRoundedRect(QRectF(0, 0, px, px), 7 * dpr, 7 * dpr)
+    base = QColor(colour)
+    g = QLinearGradient(0, 0, 0, px)
+    g.setColorAt(0, base.lighter(112))
+    g.setColorAt(1, base)
+    p.fillPath(path, g)
+    gs = size * 0.52 * dpr
+    ic = icons.pixmap(icon_name, glyph_colour, int(size * 0.52), dpr)
+    # drawn at its PHYSICAL size: the glyph carries a DPR, and a DPR-tagged
+    # pixmap dropped onto a canvas painted in device pixels lands at a fraction
+    # of the size it should
+    p.drawPixmap(QRectF((px - gs) / 2, (px - gs) / 2, gs, gs), ic,
+                 QRectF(0, 0, ic.width(), ic.height()))
+    p.end()
+    pm.setDevicePixelRatio(dpr)
+    return pm

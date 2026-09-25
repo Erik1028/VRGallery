@@ -17,7 +17,7 @@ from . import (backup, export, fmt, frame, icons, moments, paths, questimport, s
 from .db import PhotoFilter
 from .gridmodel import ThumbCache
 from .gridpage import GridPage
-from .homepage import HomePage
+from .homepage import HomePage, LivePill
 from .httpapi import LocalApi, new_token
 from .lightbox import Lightbox
 from .pages import (AlbumsPage, AvatarsPage, CleanupPage, MemoriesPage, MomentsPage,
@@ -238,6 +238,8 @@ class MainWindow(QMainWindow):
         rl.addWidget(col, 1)
 
         self.page_home = HomePage(self, self.cache)
+        self.live_pill = LivePill(self)
+        self.titlebar.set_center(self.live_pill)
         self.page_grid = GridPage(self, self.cache)
         self.page_memories = MemoriesPage(self, self.cache)
         self.page_albums = AlbumsPage(self, self.cache)
@@ -500,6 +502,8 @@ class MainWindow(QMainWindow):
             self.page_grid.view.viewport().update()
 
     def after_photos_changed(self):
+        # the pill is on every page, so it is refreshed whichever one is open
+        self.live_pill.refresh()
         cur = self.stack.currentWidget()
         # page_home first: it is the page the app opens on and the one most
         # likely to be sitting open while an index pass lands. It was missing
@@ -602,6 +606,7 @@ class MainWindow(QMainWindow):
             # when nothing has: refresh() compares a fingerprint first.
             if self.stack.currentWidget() is self.page_home:
                 self.page_home.refresh()
+            self.live_pill.refresh()
 
     def quit_app(self):
         self._quitting = True
@@ -1276,6 +1281,7 @@ class MainWindow(QMainWindow):
         self.page_grid.sticky.update()
         for w in self.findChildren(QWidget):
             w.update()
+        self.live_pill.refresh(force=True)       # its colours are inline
         self.toast(f"Theme: {style.PALETTES[key]['label']}", "ok")
 
     def set_accent(self, key):
@@ -1343,6 +1349,10 @@ class MainWindow(QMainWindow):
 
     def showEvent(self, ev):
         super().showEvent(ev)
+        # the pill starts hidden and only an index pass would otherwise wake it,
+        # so a library opened with no indexing (or before the first pass lands)
+        # would show no title-bar pill at all
+        QTimer.singleShot(0, self.live_pill.refresh)
         # Not in __init__: there is no native window until the widget is shown,
         # and GetWindowLong on a null handle silently does nothing.
         global _SNAP_INSTALLED
