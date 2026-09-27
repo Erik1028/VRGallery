@@ -806,7 +806,8 @@ def test_the_pill_says_where_you_are_while_the_game_runs(home, monkeypatch):
     _game(monkeypatch, True)
     pill.refresh(force=True)
     assert not pill.isHidden()
-    assert pill._title.text() == "In VRChat · World 1"
+    assert pill._title.text() == "World 1"
+    assert pill._sub.tag == "IN VRCHAT"
     assert not pill._dot.isHidden(), "live, and no green dot"
     sub = _nbsp(pill._sub.text())
     assert sub.startswith("Friends · "), sub
@@ -821,7 +822,8 @@ def test_between_sessions_it_says_where_you_were_last(home, monkeypatch):
     _game(monkeypatch, False)
     pill.refresh(force=True)
     assert not pill.isHidden(), "gone between sessions: the title bar would jump"
-    assert pill._title.text() == "Last in VRChat · World 1"
+    assert pill._title.text() == "World 1"
+    assert pill._sub.tag == "LAST IN VRCHAT"
     assert pill._dot.isHidden()
     bits = _nbsp(pill._sub.text()).split(" · ")
     assert bits[0] == "March 18", bits
@@ -908,7 +910,7 @@ def test_the_game_starting_redraws_the_pill(home, monkeypatch):
     pill.refresh(force=True)
     _game(monkeypatch, True)
     pill.refresh()
-    assert pill._title.text().startswith("In VRChat")
+    assert pill._sub.tag == "IN VRCHAT"
 
 
 def test_the_pill_waits_while_the_window_is_hidden(home, monkeypatch):
@@ -920,11 +922,11 @@ def test_the_pill_waits_while_the_window_is_hidden(home, monkeypatch):
     QApplication.instance().processEvents()
     _game(monkeypatch, True)
     pill.refresh()
-    assert pill._dirty and pill._title.text().startswith("Last in"), "worked while hidden"
+    assert pill._dirty and pill._sub.tag == "LAST IN VRCHAT", "worked while hidden"
     win.show()
     for _ in range(20):
         QApplication.instance().processEvents()
-    assert not pill._dirty and pill._title.text().startswith("In VRChat"), \
+    assert not pill._dirty and pill._sub.tag == "IN VRCHAT", \
         "did not catch up when the window came back"
 
 
@@ -939,3 +941,144 @@ def test_the_pill_fits_inside_the_title_bar(home):
     top = pill.mapTo(win.titlebar, pill.rect().topLeft()).y()
     assert top >= 0 and top + pill.height() <= win.titlebar.height(), (
         "the pill spills out of the title bar")
+
+
+# --------------------------------------------- the pill, polished (2026-09-27)
+#
+# Erik: "you could still prettify this part a little", over a screenshot where
+# the world name was cut at "(Open ..." and the whole idle pill looked greyed
+# out. The fixes that are about more than taste are held here.
+
+LONG_WORLD = "VUdon Vehicles - Desert\uff08Open Alpha\uff09"
+
+
+def test_the_world_is_the_title_and_nothing_else(home, monkeypatch):
+    """"Last in VRChat · " took a third of the line, and the world -- the one
+    thing worth reading -- was the part that got cut."""
+    win, _page = home
+    pill = win.live_pill
+    _game(monkeypatch, False)
+    pill.refresh(force=True)
+    assert "VRCHAT" not in pill._title.text().upper()
+    assert "VRCHAT" in pill._sub.tag
+
+
+def test_a_long_world_name_is_not_cut_when_there_is_room(home, monkeypatch):
+    """The name in Erik's screenshot, in a 1400 px window: the pill takes the
+    width the name asks for, up to its cap, before anything is elided. (On
+    Windows the name fits whole at about 245 px; the offscreen platform the
+    tests run on draws a far wider fallback font, so the fit itself is checked
+    on screen, and this holds the growing.)"""
+    win, _page = home
+    pill = win.live_pill
+    _game(monkeypatch, False)
+    real = win.db.last_sitting
+
+    def named(*a, **k):
+        sit = real(*a, **k)
+        sit["worlds"][0] = [sit["worlds"][0][0], LONG_WORLD] + list(sit["worlds"][0][2:])
+        return sit
+    monkeypatch.setattr(win.db, "last_sitting", named)
+    pill.refresh(force=True)
+    for _ in range(10):
+        QApplication.instance().processEvents()
+    t = pill._title
+    need = t.fontMetrics().horizontalAdvance(LONG_WORLD)
+    chrome = pill.width() - t.width()
+    assert t.text() == LONG_WORLD
+    assert pill.width() >= min(pill.MAX_W, need + chrome), (
+        "the pill is %d px and the name wanted %d" % (pill.width(), need + chrome))
+
+
+def test_the_pill_does_not_shift_as_the_clock_ticks(home, monkeypatch):
+    """It is centred in the title bar, so every change of width moves it, and
+    the clock line changes once a minute. Its width is measured with digits as
+    zeros. Segoe UI's digits are all one width anyway, and so are the offscreen
+    platform's -- so the text is measured here with a stand-in in which a "1"
+    is narrow, as it is in any font with proportional figures."""
+    import PySide6.QtGui as G
+    win, _page = home
+    facts = win.live_pill._sub
+
+    class Metrics:
+        def __init__(self, _font):
+            pass
+
+        def horizontalAdvance(self, text):
+            return sum(3 if ch == "1" else 7 for ch in text)
+
+    monkeypatch.setattr(G, "QFontMetricsF", Metrics)
+    facts.tag = ""
+    widths = set()
+    for clock in ("1h 11m", "1h 12m", "8h 08m", "10h 41m"[1:]):
+        facts.setText("Invite+ · %s in-world" % clock)
+        widths.add(facts.full_width())
+    assert len(widths) == 1, "the clock line's width follows the digits: %s" % sorted(widths)
+
+
+def test_the_live_glyph_can_be_seen_on_the_green(home):
+    """White on the mint tile measured 1.7:1. The glyph takes the page's own
+    dark on a light fill, as Mixtape's OnColor does, and white on a dark one."""
+    from vrgallery import homepage
+    assert homepage._ink_on(style.PAL["ok"]) == style.PAL["bg"]
+    assert homepage._ink_on("#1b5e3a") == "#ffffff"
+
+
+def test_the_idle_title_is_quieter_than_live_but_not_greyed_out(home, monkeypatch):
+    """The first idle pill painted its title in `dim` and read as disabled."""
+    from PySide6.QtGui import QColor
+
+    def lum(c):
+        c = QColor(c)
+        return 0.299 * c.red() + 0.587 * c.green() + 0.114 * c.blue()
+
+    def title_colour():
+        return pill._title.styleSheet().split("color:")[1].split(";")[0].strip()
+
+    win, _page = home
+    pill = win.live_pill
+    _game(monkeypatch, False)
+    pill.refresh(force=True)
+    idle = title_colour()
+    _game(monkeypatch, True)
+    pill.refresh(force=True)
+    live = title_colour()
+    assert lum(style.PAL["dim"]) < lum(idle) < lum(live), (idle, live)
+
+
+def test_an_unnamed_world_still_says_something(home, monkeypatch):
+    win, _page = home
+    pill = win.live_pill
+    _game(monkeypatch, False)
+    real = win.db.last_sitting
+
+    def unnamed(*a, **k):
+        sit = real(*a, **k)
+        sit["worlds"] = []
+        return sit
+    monkeypatch.setattr(win.db, "last_sitting", unnamed)
+    pill.refresh(force=True)
+    assert pill._title.text() == "Unnamed world"
+
+
+def test_the_whole_name_is_in_the_tooltip(home, monkeypatch):
+    """The bar elides a long name; hovering is how to read the rest."""
+    win, _page = home
+    pill = win.live_pill
+    _game(monkeypatch, True)
+    pill.refresh(force=True)
+    tip = pill.toolTip()
+    assert "World 1" in tip and "In VRChat" in tip and "Home" in tip
+
+
+def test_the_dot_sits_on_the_tile_and_inside_the_pill(home, monkeypatch):
+    win, _page = home
+    pill = win.live_pill
+    _game(monkeypatch, True)
+    pill.refresh(force=True)
+    for _ in range(10):
+        QApplication.instance().processEvents()
+    d, t = pill._dot.geometry(), pill._tile.geometry()
+    assert t.contains(d.center()), "the dot is not on the tile"
+    ring = pill._dot.CORE + pill._dot.RING
+    assert d.y() + 7.5 + ring <= pill.height() - 2, "the dot's ring runs into the border"
