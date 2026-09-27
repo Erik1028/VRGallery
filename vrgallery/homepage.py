@@ -764,18 +764,30 @@ class LivePill(Clickable):
 
     Mixtape keeps a now-playing pill in its caption strip; this is VR Gallery's.
     Erik asked for this one piece of Mixtape's design and nothing else of it
-    (2026-09-25). While the game runs it says so in the green the Home card
-    uses -- the world, the instance, in-world time so far, the photographs --
-    and between sessions it says, dimmer, where you were last. It is there in
-    both states on purpose: gone whenever the game was closed, the title bar
-    would change height each time VRChat started or stopped and every page
-    under it would jump.
+    (2026-09-25). It is there whether or not the game runs, on purpose: gone
+    whenever the game was closed, the title bar would change height each time
+    VRChat started or stopped and every page under it would jump.
+
+    The world is the title, alone. The first version led with "In VRChat · " /
+    "Last in VRChat · ", which ate a third of the line, so the one thing worth
+    reading was the part that got cut -- Erik's own screenshot ended at "VUdon
+    Vehicles - Desert (Open ...". The state is a small tag at the head of the
+    second line instead, in the letter-spaced capitals Home's own headings
+    wear: IN VRCHAT in the Home card's green, LAST IN VRCHAT in grey. While the
+    game runs the tile is green and carries an online dot on its corner; between
+    sessions it is a grey tile like the ones on Home's stat cards, and the title
+    is a step quieter than live but not greyed out -- the first version's idle
+    pill read as a disabled control (2026-09-27, picked by three judges from
+    four variants rendered in the real window).
 
     It reads exactly what the Home card reads (last_sitting, is_live,
     live_minutes), so the two cannot tell different stories. A click opens Home.
     """
 
-    HEIGHT = 44
+    HEIGHT = 40      # 6 px of air above and below it in the 52 px title bar
+    TILE = 32
+    INSET = 4        # tile to the inside of the border; its radius is 10 - 4
+    MAX_W = 380
 
     def __init__(self, main, parent=None):
         super().__init__(lambda: main.activate("home"), parent)
@@ -783,23 +795,28 @@ class LivePill(Clickable):
         self.setObjectName("LivePill")
         self.setFixedHeight(self.HEIGHT)
         self.setMinimumWidth(240)
-        self.setMaximumWidth(380)
+        self.setMaximumWidth(self.MAX_W)
         self.setSizePolicy(QSizePolicy.Expanding, QSizePolicy.Fixed)
         lay = QHBoxLayout(self)
-        lay.setContentsMargins(5, 5, 12, 5)
+        lay.setContentsMargins(self.INSET, 0, 12, 0)
         lay.setSpacing(10)
-        self._tile = QLabel()
-        self._tile.setFixedSize(34, 34)
-        lay.addWidget(self._tile)
+        self._tile = _PillTile(self.TILE, self)
+        lay.addWidget(self._tile, 0, Qt.AlignVCenter)
         col = QVBoxLayout()
+        # the text block, cap top to last baseline, lands on the pill's middle
+        col.setContentsMargins(0, 1, 0, 0)
         col.setSpacing(0)
         self._title = widgets.ElidedLabel("")
-        self._sub = widgets.ElidedLabel("")
+        self._title.setFixedHeight(18)       # a whole line: descenders survive eliding
+        self._sub = _PillFacts()
+        self._sub.setFixedHeight(15)
+        self._sub.setStyleSheet("font-size:11px;")
         col.addWidget(self._title)
         col.addWidget(self._sub)
+        col.addStretch(1)
         lay.addLayout(col, 1)
-        self._dot = QLabel("●")
-        lay.addWidget(self._dot)
+        self._dot = _PillDot(self)
+        self._dot.hide()
         self._key = None
         self._sit = None
         self._live = False
@@ -826,11 +843,29 @@ class LivePill(Clickable):
         self._clock.stop()
         super().hideEvent(ev)
 
+    def resizeEvent(self, ev):
+        super().resizeEvent(ev)
+        self._place_dot()
+
+    def _place_dot(self):
+        """On the tile's bottom-right corner, wherever the layout put the tile,
+        and far enough in that its ring clears the pill's border."""
+        dot = getattr(self, "_dot", None)
+        if dot is None:
+            return
+        g = self._tile.geometry()
+        dot.move(g.right() - 11, g.bottom() - 11)
+        dot.raise_()
+
     def _sync(self):
+        P = style.PAL
         self.setStyleSheet(
             "QFrame#LivePill { background:%s; border:1px solid %s; border-radius:10px; }"
-            % (style.PAL["hover"] if self._hover else style.PAL["surface"],
-               style.PAL["border"]))
+            % (P["hover"] if self._hover else P["surface"],
+               P["border2"] if self._hover else P["border"]))
+        dot = getattr(self, "_dot", None)
+        if dot is not None:
+            dot.update()             # its ring is the pill's colour, hover included
 
     def refresh(self, force=False):
         win = self.window()
@@ -858,21 +893,30 @@ class LivePill(Clickable):
         self.tick(now)
         self.show()
 
-    def _paint_state(self):
-        live = self._live
+    def _where(self):
         sit = self._sit
-        tone = style.PAL["ok"] if live else style.PAL["surface2"]
-        glyph = "#ffffff" if live else style.PAL["dim"]
-        self._tile.setPixmap(_tile_pixmap("globe", 34, tone, glyph, self.devicePixelRatioF()))
-        where = (sit["world_name"] if live else (sit["worlds"][0][1] if sit["worlds"] else "")) \
-            or "somewhere"
-        self._title.setText(("In VRChat · " if live else "Last in VRChat · ") + where)
-        self._title.setStyleSheet("color:%s; font-size:13px; font-weight:600;"
-                                  % style.PAL["text" if live else "dim"])
-        self._sub.setStyleSheet("color:%s; font-size:11px;" % style.PAL["faint"])
+        return (sit["world_name"] if self._live
+                else (sit["worlds"][0][1] if sit["worlds"] else "")) or "Unnamed world"
+
+    def _paint_state(self):
+        P = style.PAL
+        live = self._live
+        self._tile.live = live
+        self._tile.update()
+        self._title.setText(self._where())
+        title = P["text"] if live else _blend(P["text"], P["dim"], 0.25)
+        self._title.setStyleSheet("color:%s; font-size:13px; font-weight:600;" % title)
+        f = self._sub
+        if live:
+            f.tag, f.tag_colour = "IN VRCHAT", P["ok"]
+        else:
+            # a step brighter than `faint`, which fell under 4.5:1 on hover
+            f.tag, f.tag_colour = "LAST IN VRCHAT", _blend(P["faint"], P["dim"], 0.55)
+        f.fact_colour, f.sep_colour = P["dim"], P["faint"]
+        f.updateGeometry()
+        f.update()
         self._dot.setVisible(live)
-        self._dot.setStyleSheet("color:%s; font-size:10px;" % style.PAL["ok"])
-        self.setToolTip("Open Home")
+        self._place_dot()
         self._sync()
 
     def tick(self, now):
@@ -890,31 +934,197 @@ class LivePill(Clickable):
         if n:
             bits.append("%d %s" % (n, fmt.plural(n, "photo")))
         self._sub.setText(" · ".join(b for b in bits if b))
+        # the bar elides a long name; the tooltip is where the whole of it is
+        self.setToolTip("%s\n%s\n%s\nClick to open Home"
+                        % ("In VRChat now" if self._live else "Last in VRChat",
+                           self._where(), self._sub.text().replace("\u00a0", " ")))
 
 
-def _tile_pixmap(icon_name, size, colour, glyph_colour, dpr):
-    """A rounded colour tile with one glyph on it, drawn at the screen's DPR."""
-    from PySide6.QtCore import QRectF
-    from PySide6.QtGui import QColor, QLinearGradient, QPainter, QPainterPath, QPixmap
-    px = int(size * dpr)
-    pm = QPixmap(px, px)
-    pm.fill(Qt.transparent)
-    p = QPainter(pm)
-    p.setRenderHint(QPainter.Antialiasing, True)
-    path = QPainterPath()
-    path.addRoundedRect(QRectF(0, 0, px, px), 7 * dpr, 7 * dpr)
-    base = QColor(colour)
-    g = QLinearGradient(0, 0, 0, px)
-    g.setColorAt(0, base.lighter(112))
-    g.setColorAt(1, base)
-    p.fillPath(path, g)
-    gs = size * 0.52 * dpr
-    ic = icons.pixmap(icon_name, glyph_colour, int(size * 0.52), dpr)
-    # drawn at its PHYSICAL size: the glyph carries a DPR, and a DPR-tagged
-    # pixmap dropped onto a canvas painted in device pixels lands at a fraction
-    # of the size it should
-    p.drawPixmap(QRectF((px - gs) / 2, (px - gs) / 2, gs, gs), ic,
-                 QRectF(0, 0, ic.width(), ic.height()))
-    p.end()
-    pm.setDevicePixelRatio(dpr)
-    return pm
+def _blend(a, b, t):
+    """#rrggbb from a to b: t=0 is a, t=1 is b. Derived from the palette in
+    force, so every palette gets its own in-between."""
+    from PySide6.QtGui import QColor
+    ca, cb = QColor(a), QColor(b)
+    return QColor(round(ca.red() + (cb.red() - ca.red()) * t),
+                  round(ca.green() + (cb.green() - ca.green()) * t),
+                  round(ca.blue() + (cb.blue() - ca.blue()) * t)).name()
+
+
+def _ink_on(fill):
+    """The glyph colour for a coloured tile, as Mixtape's Theme.OnColor picks
+    it: the page's own dark on a light fill, white on a dark one. White on the
+    mint live tile measured 1.7:1."""
+    from PySide6.QtGui import QColor
+    c = QColor(fill)
+    luma = 0.299 * c.red() + 0.587 * c.green() + 0.114 * c.blue()
+    return style.PAL["bg"] if luma > 145 else "#ffffff"
+
+
+class _PillTile(QWidget):
+    """The pill's rounded tile with the globe. Painted rather than a pixmap, so
+    it is drawn at the DPR of whichever screen the window is on now."""
+
+    RADIUS = 6.0
+    GLYPH = 18       # 32 - 18 is even: the glyph sits on whole pixels
+
+    def __init__(self, size, parent=None):
+        super().__init__(parent)
+        self.setFixedSize(size, size)
+        self.setAttribute(Qt.WA_TransparentForMouseEvents, True)
+        self.live = False
+
+    def moveEvent(self, ev):
+        super().moveEvent(ev)
+        place = getattr(self.parent(), "_place_dot", None)
+        if place is not None:
+            place()
+
+    def paintEvent(self, _ev):
+        from PySide6.QtCore import QRectF
+        from PySide6.QtGui import QColor, QLinearGradient, QPainter, QPainterPath, QPen
+        P = style.PAL
+        s = self.width()
+        p = QPainter(self)
+        p.setRenderHint(QPainter.Antialiasing, True)
+        body = QPainterPath()
+        body.addRoundedRect(QRectF(0, 0, s, s), self.RADIUS, self.RADIUS)
+        if self.live:
+            ok = QColor(P["ok"])
+            g = QLinearGradient(0, 0, 0, s)
+            g.setColorAt(0, ok.lighter(108))
+            g.setColorAt(1, ok.darker(112))
+            p.fillPath(body, g)
+            glyph = _ink_on(P["ok"])
+        else:
+            # a grey tile like the stat cards' on Home, with a rim so it is a
+            # tile and not a patch of the pill it sits on
+            p.fillPath(body, QColor(_blend(P["surface2"], P["border2"], 0.5)))
+            rim = QPainterPath()
+            rim.addRoundedRect(QRectF(0.5, 0.5, s - 1, s - 1),
+                               self.RADIUS - 0.5, self.RADIUS - 0.5)
+            p.setPen(QPen(QColor(P["border2"]), 1))
+            p.setBrush(Qt.NoBrush)
+            p.drawPath(rim)
+            glyph = P["dim"]
+        gs = self.GLYPH
+        ic = icons.pixmap("globe", glyph, gs, self.devicePixelRatioF(), width=2.0)
+        off = (s - gs) // 2
+        p.drawPixmap(QRectF(off, off, gs, gs), ic, QRectF(0, 0, ic.width(), ic.height()))
+        p.end()
+
+
+class _PillDot(QWidget):
+    """The online dot on the live tile's corner, ringed in the pill's own
+    colour so it reads as cut out of the tile -- the presence badge every chat
+    app uses. Still: a dot that pulsed all evening would be the one thing on
+    screen that never stopped moving."""
+
+    SIZE = 15
+    CORE = 3.5       # centred on a half pixel: a 7 px dot with whole-pixel edges
+    RING = 2.0
+
+    def __init__(self, pill):
+        super().__init__(pill)
+        self.pill = pill
+        self.setFixedSize(self.SIZE, self.SIZE)
+        self.setAttribute(Qt.WA_TransparentForMouseEvents, True)
+
+    def paintEvent(self, _ev):
+        from PySide6.QtCore import QPointF
+        from PySide6.QtGui import QColor, QPainter
+        P = style.PAL
+        c = QPointF(7.5, 7.5)
+        p = QPainter(self)
+        p.setRenderHint(QPainter.Antialiasing, True)
+        p.setPen(Qt.NoPen)
+        p.setBrush(QColor(P["hover"] if self.pill._hover else P["surface"]))
+        p.drawEllipse(c, self.CORE + self.RING, self.CORE + self.RING)
+        p.setBrush(QColor(P["ok"]))
+        p.drawEllipse(c, self.CORE, self.CORE)
+        p.end()
+
+
+class _PillFacts(widgets.ElidedLabel):
+    """The pill's second line: the state tag, then the facts.
+
+    One painter pass, so the 10 px tag and the 11 px facts share one baseline
+    exactly -- two labels of two sizes side by side each centre themselves and
+    land a pixel apart. `text()` is the facts alone. The " · " between facts is
+    a step fainter than the facts, and each one is centred between the INK on
+    either side of it: by the advances, "Invite+ · 1h" put it a pixel right of
+    centre (the "+" carries a wide right bearing, a tabular "1" a wide left one).
+    """
+
+    GAP = 7          # tag to facts
+    SPACING = 0.8    # the tag's letter-spacing, px
+
+    def __init__(self, parent=None):
+        super().__init__("", parent)
+        self.tag = ""
+        self.tag_colour = self.fact_colour = self.sep_colour = "#ffffff"
+
+    def _tag_font(self):
+        from PySide6.QtGui import QFont, QFontInfo
+        f = QFont(self.font())
+        px = self.font().pixelSize()
+        if px <= 0:
+            px = QFontInfo(self.font()).pixelSize()
+        f.setPixelSize(max(9, px - 1))
+        f.setWeight(QFont.Bold)
+        f.setLetterSpacing(QFont.AbsoluteSpacing, self.SPACING)
+        return f
+
+    def tag_width(self):
+        from PySide6.QtGui import QFontMetricsF
+        if not self.tag:
+            return 0.0
+        return (QFontMetricsF(self._tag_font()).horizontalAdvance(self.tag)
+                - self.SPACING + self.GAP)
+
+    def full_width(self):
+        # Digits measured as zeros: the clock in this line changes every
+        # minute, and a width that followed it would re-centre the pill in the
+        # title bar each time "1h 09m" became "1h 10m".
+        import re
+        from PySide6.QtGui import QFontMetricsF
+        steady = re.sub(r"\d", "0", self._full)
+        return int(self.tag_width() + QFontMetricsF(self.font()).horizontalAdvance(steady)) + 2
+
+    def sizeHint(self):
+        from PySide6.QtCore import QSize
+        return QSize(self.full_width(), super().sizeHint().height())
+
+    def paintEvent(self, _ev):
+        from PySide6.QtCore import QPointF
+        from PySide6.QtGui import QColor, QFontMetricsF, QPainter
+        f = self.font()
+        fm = QFontMetricsF(f)
+        base = round((self.height() - fm.height()) / 2 + fm.ascent())
+        p = QPainter(self)
+        p.setRenderHint(QPainter.TextAntialiasing, True)
+        x = 0.0
+        if self.tag:
+            p.setFont(self._tag_font())
+            p.setPen(QColor(self.tag_colour))
+            p.drawText(QPointF(x, base), self.tag)
+            x += self.tag_width()
+        p.setFont(f)
+        text = fm.elidedText(self._full, Qt.ElideRight, max(0.0, self.width() - x))
+        sep = " · "
+        parts = text.split(sep)
+        starts = []
+        for part in parts:
+            starts.append(x)
+            x += fm.horizontalAdvance(part) + fm.horizontalAdvance(sep)
+        p.setPen(QColor(self.fact_colour))
+        for x0, part in zip(starts, parts):
+            p.drawText(QPointF(x0, base), part)
+        dot = fm.tightBoundingRect("·")
+        p.setPen(QColor(self.sep_colour))
+        for i in range(1, len(parts)):
+            a, b = parts[i - 1], parts[i]
+            left = starts[i - 1] + (fm.tightBoundingRect(a).right() if a.strip() else 0)
+            right = starts[i] + (fm.tightBoundingRect(b).left() if b.strip() else 0)
+            p.drawText(QPointF(round((left + right) / 2 - dot.width() / 2 - dot.left()), base),
+                       "·")
+        p.end()
