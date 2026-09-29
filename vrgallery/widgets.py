@@ -1404,8 +1404,13 @@ class TitleBar(QFrame):
         self.btn_min = self._chrome("win-min", "Minimise", window.showMinimized)
         self.btn_max = self._chrome("win-max", "Maximise", self.toggle_max)
         self.btn_close = self._chrome("x", "Close", window.close, danger=True)
+        # Up in the corner, not centred: centred in a bar grown to 52 px for the
+        # pill they sat 21 px below the window's top edge and 8 px from its
+        # side. At the top of the bar they are as far from the top as from the
+        # side (the window's 8 px edge), and maximised, where that edge is
+        # gone, Close is in the screen's corner as it is everywhere on Windows.
         for b in (self.btn_min, self.btn_max, self.btn_close):
-            lay.addWidget(b)
+            lay.addWidget(b, 0, Qt.AlignTop)
 
     def set_center(self, widget):
         """Put something in the middle of the bar, between the title and the
