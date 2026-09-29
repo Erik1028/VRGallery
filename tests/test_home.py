@@ -1082,3 +1082,25 @@ def test_the_dot_sits_on_the_tile_and_inside_the_pill(home, monkeypatch):
     assert t.contains(d.center()), "the dot is not on the tile"
     ring = pill._dot.CORE + pill._dot.RING
     assert d.y() + 7.5 + ring <= pill.height() - 2, "the dot's ring runs into the border"
+
+
+def test_the_window_buttons_sit_in_the_corner(home):
+    """Centred in the title bar once it grew to 52 px for the pill, they sat
+    21 px under the window's top edge and 8 px from its side (Erik,
+    2026-09-29: "too far down"). As far from the top as from the side; and
+    maximised, where the window's edge is gone, Close is in the corner."""
+    win, _page = home
+    app = QApplication.instance()
+    win.showNormal()
+    for _ in range(10):
+        app.processEvents()
+    b = win.titlebar.btn_close
+    tl = b.mapTo(win, b.rect().topLeft())
+    top, side = tl.y(), win.width() - (tl.x() + b.width())
+    assert top == side, "Close is %d px from the top and %d from the side" % (top, side)
+    win.showMaximized()
+    for _ in range(10):
+        app.processEvents()
+    tl = b.mapTo(win, b.rect().topLeft())
+    assert (tl.y(), win.width() - (tl.x() + b.width())) == (0, 0), "maximised, Close left the corner"
+    win.showNormal()
