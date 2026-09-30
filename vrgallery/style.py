@@ -38,6 +38,19 @@ PALETTES = {
 }
 DEFAULT_PALETTE = "midnight"
 
+# The Windows 95 look (Settings > Appearance > Look). Set once at start-up by
+# set_classic, before anything is built; see classic.py. While it is on, PAL
+# is the 1995 palette whatever theme is saved, and the accent is navy.
+CLASSIC = False
+
+
+def set_classic(on):
+    global CLASSIC
+    CLASSIC = bool(on)
+    if CLASSIC:
+        from . import classic
+        PAL.update(classic.PAL)
+
 
 def apply_palette(key):
     """Put one palette in force. -> the key actually applied.
@@ -49,6 +62,8 @@ def apply_palette(key):
     by the caller; see MainWindow.set_palette.
     """
     key = key if key in PALETTES else DEFAULT_PALETTE
+    if CLASSIC:
+        return key                   # 1995 has one palette; the choice waits
     PAL.update({k: v for k, v in PALETTES[key].items()
                 if k not in ("label", "swatch")})
     return key
@@ -68,6 +83,9 @@ ICON_CUT = "#2f6fd8"                            # stands in for a punched-out ho
 
 
 def accent(cfg_accent):
+    if CLASSIC:
+        from . import classic
+        return classic.ACCENT
     return ACCENTS.get(cfg_accent, ACCENTS[DEFAULT_ACCENT])
 
 
@@ -95,9 +113,20 @@ def _arrow_url():
     return p.replace("\\", "/")
 
 
+def caps(text):
+    """A caption in capitals -- or, in the Windows 95 look, in sentence case."""
+    if CLASSIC:
+        from . import classic
+        return classic.sentence(text.upper())
+    return text.upper()
+
+
 def build_qss(accent_key=DEFAULT_ACCENT):
     global ACTIVE
     ac = ACTIVE = accent(accent_key)
+    if CLASSIC:
+        from . import classic
+        return classic.qss()
     A, B = ac["a"], ac["b"]
     P = PAL
     arrow = _arrow_url()

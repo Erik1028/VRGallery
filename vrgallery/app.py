@@ -18,6 +18,9 @@ def main(argv=None):
     ap.add_argument("--shot", metavar="PNG", help="screenshot the window to a file and exit")
     ap.add_argument("--page", default="all", help="page key for --shot")
     ap.add_argument("--wait", type=int, default=2600, help="ms to wait before --shot")
+    # a restart asked for from Settings: the copy that asked is still closing,
+    # so the lock is waited for rather than taken as another running copy
+    ap.add_argument("--restarted", action="store_true", help=argparse.SUPPRESS)
     ap.add_argument("--size", metavar="WxH",
                     help="window size for --shot, e.g. 1100x700 (checks narrow layouts)")
     args = ap.parse_args(argv)
@@ -63,7 +66,7 @@ def main(argv=None):
 
     lock = QLockFile(paths.LOCK_PATH)
     lock.setStaleLockTime(0)
-    if not args.shot and not lock.tryLock(100):
+    if not args.shot and not lock.tryLock(10000 if args.restarted else 100):
         # Clicking the icon again should bring the app up, not tell you off for
         # clicking it. The box is only for the case where the running copy
         # cannot be found -- a stale lock, or a window that never opened.
@@ -80,6 +83,10 @@ def main(argv=None):
         app.setWindowIcon(QIcon(icons.logo_pixmap(256, 1.0)))
 
     cfg = Config()
+    if cfg.get("skin") == "win95":
+        from . import classic
+        style.set_classic(True)
+        classic.apply(app)
     style.apply_palette(cfg.get("palette"))
     app.setStyleSheet(style.build_qss(cfg.get("accent")))
     db = Database()

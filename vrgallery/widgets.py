@@ -528,6 +528,13 @@ class Glass:
     @staticmethod
     def paint(p, widget, source, radius=16, tint=None, tint_alpha=None, stamp=None):
         """Fill `widget`'s whole rect with glass. -> True if a backdrop was used."""
+        if style.CLASSIC:
+            # 1995 had no glass: a floating toast or selection bar is a raised
+            # panel, a page's header bar is the plain face
+            from . import classic
+            floating = widget.objectName() in ("Toast", "SelBar")
+            classic.panel(p, widget, "raised" if floating else None)
+            return True
         surf = Glass.surface(widget, source, radius, tint, tint_alpha, stamp=stamp)
         if surf is None:
             return False
@@ -865,6 +872,10 @@ class PageHead(QWidget):
         # page you are on, and nothing else browses by year.
         self._optional.append((0.5, self.lab_sub))
         self._title_fx = QGraphicsOpacityEffect(self.titlecol)
+        # Qt starts an opacity effect at 0.7, not 1.0: until the first scroll
+        # animated it, every page's title was drawn at 70% (found 2026-09-30,
+        # when the Windows 95 look's black title came out grey)
+        self._title_fx.setOpacity(1.0)
         self.titlecol.setGraphicsEffect(self._title_fx)
         row.addWidget(self.titlecol)
         row.addStretch(1)
@@ -1015,6 +1026,8 @@ class PageHead(QWidget):
             QPainter(self).drawPixmap(0, 0, shadow)
 
     def _shadow_pixmap(self):
+        if style.CLASSIC:
+            return None                  # 1995 had no drop shadow anywhere
         panel = self.bar.geometry()
         if self._extra is not None and self._extra.isVisible():
             panel = panel.united(self._extra.geometry())
@@ -1376,6 +1389,16 @@ def on_window_edge(widget, pos):
         return False          # the window went away mid-event
 
 
+def _classic():
+    from . import classic
+    return classic
+
+
+def paths_app_name():
+    from . import paths
+    return paths.APP_NAME
+
+
 class TitleBar(QFrame):
     """The window's own title bar, so the chrome matches the app.
 
@@ -1393,6 +1416,9 @@ class TitleBar(QFrame):
         super().__init__(window)
         self.win = window
         self.setObjectName("TitleBar")
+        if style.CLASSIC:
+            self._build_classic()
+            return
         self.setFixedHeight(self.HEIGHT)
         lay = QHBoxLayout(self)
         lay.setContentsMargins(0, 0, 0, 0)
@@ -1411,6 +1437,36 @@ class TitleBar(QFrame):
         # gone, Close is in the screen's corner as it is everywhere on Windows.
         for b in (self.btn_min, self.btn_max, self.btn_close):
             lay.addWidget(b, 0, Qt.AlignTop)
+
+    def _build_classic(self):
+        """The caption of 1995: navy, the small icon, the title in bold white,
+        and three 16 x 14 bevelled buttons -- minimise and maximise side by
+        side, a gap, then close."""
+        from . import classic
+        self.setAttribute(Qt.WA_StyledBackground, True)
+        self.setFixedHeight(classic.CAPTION_H)
+        lay = QHBoxLayout(self)
+        lay.setContentsMargins(2, 1, 2, 1)
+        lay.setSpacing(0)
+        ico = QLabel()
+        ico.setFixedSize(16, 16)
+        ico.setPixmap(icons.logo_pixmap(16, self.devicePixelRatioF()))
+        lay.addWidget(ico)
+        lay.addSpacing(3)
+        self.lab = QLabel(paths_app_name())
+        self.lab.setObjectName("TitleBarText")
+        lay.addWidget(self.lab)
+        lay.addStretch(1)
+        self.btn_min = classic.CaptionButton("min", "Minimise")
+        self.btn_max = classic.CaptionButton("max", "Maximise")
+        self.btn_close = classic.CaptionButton("close", "Close")
+        self.btn_min.clicked.connect(self.win.showMinimized)
+        self.btn_max.clicked.connect(self.toggle_max)
+        self.btn_close.clicked.connect(self.win.close)
+        lay.addWidget(self.btn_min, 0, Qt.AlignVCenter)
+        lay.addWidget(self.btn_max, 0, Qt.AlignVCenter)
+        lay.addSpacing(2)
+        lay.addWidget(self.btn_close, 0, Qt.AlignVCenter)
 
     def set_center(self, widget):
         """Put something in the middle of the bar, between the title and the
@@ -1432,6 +1488,8 @@ class TitleBar(QFrame):
         return b
 
     def set_text(self, text):
+        if style.CLASSIC:
+            return                       # the caption carries the app's name
         self.lab.setText(text)
 
     def toggle_max(self):
@@ -1443,6 +1501,11 @@ class TitleBar(QFrame):
 
     def sync(self):
         maxed = self.win.isMaximized()
+        if style.CLASSIC:
+            self.btn_max.glyph = "restore" if maxed else "max"
+            self.btn_max.setToolTip("Restore" if maxed else "Maximise")
+            self.btn_max.update()
+            return
         self.btn_max.setIcon(icons.qicon("win-restore" if maxed else "win-max",
                                          style.PAL["dim"], 14))
         self.btn_max.setToolTip("Restore" if maxed else "Maximise")
@@ -1644,14 +1707,41 @@ class Card(QFrame):
         self.vbox.setContentsMargins(18, 16, 18, 16)
         self.vbox.setSpacing(12)
         self._title = None
+        if style.CLASSIC:
+            # a group box of 1995: its caption sits in the etched line itself
+            self.vbox.setContentsMargins(10, 18, 10, 10)
+            self.vbox.setSpacing(8)
+            self._caption = title
+            return
         if title:
             self._title = QLabel(title)
             self._title.setObjectName("CardTitle")
             self.vbox.addWidget(self._title)
 
     def set_title(self, title):
+        if style.CLASSIC:
+            self._caption = title
+            self.update()
+            return
         if self._title is not None:
             self._title.setText(title)
+
+    def paintEvent(self, ev):
+        if not style.CLASSIC:
+            return super().paintEvent(ev)
+        from . import classic
+        p = QPainter(self)
+        fm = self.fontMetrics()
+        top = fm.height() // 2
+        r = self.rect().adjusted(0, top, 0, 0)
+        classic.bevel(p, r, "etched")
+        text = classic.sentence(self._caption or "")
+        if text:
+            tw = fm.horizontalAdvance(text) + 6
+            p.fillRect(QRect(8, 0, tw, fm.height()), QColor(classic.FACE))
+            p.setPen(QColor(classic.DARK))
+            p.drawText(QRect(11, 0, tw, fm.height()), Qt.AlignLeft | Qt.AlignVCenter, text)
+        p.end()
 
 
 class StatCard(QFrame):
@@ -1665,10 +1755,15 @@ class StatCard(QFrame):
         self._ic = QLabel()
         self._ic.setFixedSize(40, 40)
         self._ic.setAlignment(Qt.AlignCenter)
-        self._ic.setStyleSheet(
-            "background:%s; border-radius:12px;" % style.mix(style.PAL["border2"], 0.5))
-        self._ic.setPixmap(icons.pixmap(icon_name, style.PAL["dim"], 20,
-                                        self.devicePixelRatioF()))
+        if style.CLASSIC and icon_name in _classic().FEATHER:
+            # the 1995 picture at 32 px, on the face: no tile under it
+            self._ic.setPixmap(_classic().icon(_classic().FEATHER[icon_name], 2,
+                                               self.devicePixelRatioF()))
+        else:
+            self._ic.setStyleSheet(
+                "background:%s; border-radius:12px;" % style.mix(style.PAL["border2"], 0.5))
+            self._ic.setPixmap(icons.pixmap(icon_name, style.PAL["dim"], 20,
+                                            self.devicePixelRatioF()))
         col = QVBoxLayout()
         col.setSpacing(0)
         self._num = QLabel("–")
@@ -1716,7 +1811,7 @@ def ghost_btn(text, icon_name=None, parent=None, danger=False, primary=False):
 
 class SectionLabel(QLabel):
     def __init__(self, text, parent=None):
-        super().__init__(text.upper(), parent)
+        super().__init__(style.caps(text), parent)
         self.setObjectName("SectionLabel")
 
 

@@ -14,6 +14,7 @@ DEFAULTS = {
     "jpeg_quality": 92,
     "accent": "vrblue",
     "palette": "midnight",       # the whole ground; see style.PALETTES
+    "skin": "modern",            # "modern" or "win95"; read once at start-up
     "thumb_px": 176,
     "sort_desc": True,
     "window": None,           # [x, y, w, h, maximized]
