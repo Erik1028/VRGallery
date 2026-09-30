@@ -47,6 +47,26 @@ NAV = [
     ("cleanup", "Cleanup", "zap"),
 ]
 
+def restart_args(argv):
+    """The command line a restarted copy gets: the library it was opened on
+    (--data-dir) and --no-index carried over -- without them a copy started on
+    another library would come back on the default one -- and --restarted.
+    Nothing else: --tray would bring it back hidden, --shot would take a
+    screenshot and exit."""
+    keep = []
+    i = 0
+    while i < len(argv):
+        a = argv[i]
+        if a == "--data-dir" and i + 1 < len(argv):
+            keep += argv[i:i + 2]
+            i += 2
+            continue
+        if a.startswith("--data-dir=") or a == "--no-index":
+            keep.append(a)
+        i += 1
+    return keep + ["--restarted"]
+
+
 WORLD_URL = "https://vrchat.com/home/world/"
 # world ids arrive from PNG metadata written by another program, so they are
 # untrusted input and get shape-checked before they are ever pasted into a URL
@@ -143,6 +163,102 @@ class MainWindow(QMainWindow):
         self.setWindowFlag(Qt.FramelessWindowHint, True)
         self.setAttribute(Qt.WA_Hover, True)
 
+        self.titlebar = widgets.TitleBar(self)
+        self.statusbar = None
+        root = self._classic_shell() if style.CLASSIC else self._modern_shell()
+
+        self.page_home = HomePage(self, self.cache)
+        self.live_pill = LivePill(self)
+        if self.statusbar is not None:
+            self.statusbar.add(self.live_pill)
+            self.statusbar.add_grip(self)
+        else:
+            self.titlebar.set_center(self.live_pill)
+        self.page_grid = GridPage(self, self.cache)
+        self.page_memories = MemoriesPage(self, self.cache)
+        self.page_albums = AlbumsPage(self, self.cache)
+        self.page_moments = MomentsPage(self, self.cache)
+        self.page_person = PersonPage(self, self.cache)
+        self.page_sessions = SessionsPage(self, self.cache)
+        self.page_worlds = WorldsPage(self, self.cache)
+        self.page_people = PeoplePage(self, self.cache)
+        self.page_avatars = AvatarsPage(self, self.cache)
+        self.page_stats = StatsPage(self)
+        self.page_cleanup = CleanupPage(self, self.cache)
+        self.page_settings = SettingsPage(self)
+        for p in (self.page_home, self.page_grid, self.page_memories, self.page_albums, self.page_moments,
+                  self.page_person, self.page_sessions, self.page_worlds, self.page_people,
+                  self.page_avatars, self.page_stats, self.page_cleanup,
+                  self.page_settings):
+            self.stack.addWidget(p)
+        self.page_grid.back_requested.connect(self.pop_drill)
+
+        self.lightbox = Lightbox(self)
+        self.slideshow = Slideshow(cfg)
+        self.toast_w = widgets.Toast(self)
+        self.toast_w.set_glass_source(self.stack)   # it floats over the page
+
+        # ---------------- wiring ----------------
+        self.bridge.index_progress.connect(self._on_index_progress)
+        self.bridge.index_done.connect(self._on_index_done)
+        self.bridge.toast.connect(self.toast)
+        self.bridge.meta_changed.connect(self._on_meta_changed)
+        self.bridge.deep_progress.connect(self._on_deep_progress)
+        self.bridge.year_ready.connect(self._on_year_ready)
+        self.bridge.reindex_needed.connect(self.start_index)
+        self.bridge.headset_found.connect(self._on_headset_found)
+        self.bridge.sheet_ready.connect(self._on_sheet_ready)
+        self.bridge.backup_planned.connect(self._on_backup_planned)
+        self.bridge.update_available.connect(self._on_update_available)
+
+        # --no-index keeps a throwaway copy of a library exactly as it is, which
+        # is what documentation screenshots need
+        # Not on a first run: the welcome card has not been answered yet, and the
+        # folder it offers to change is the one the watcher would poll.
+        self.watcher = None
+        if auto_index and cfg.get("onboarded"):
+            self.watcher = LiveWatcher(cfg, self)
+            self.watcher.changed.connect(self._on_watch_changed)
+
+        # ---------------- tray + local API ----------------
+        self._quitting = False
+        self.tray = Tray(self)
+        self.tray.show_window.connect(self.show_from_tray)
+        self.tray.open_page.connect(lambda k: (self.show_from_tray(), self.activate(k)))
+        self.tray.reindex.connect(self.start_index)
+        self.tray.slideshow.connect(self._slideshow_favorites)
+        self.tray.wallpaper.connect(lambda: self.act_wallpaper())
+        self.tray.quit_app.connect(self.quit_app)
+        self.tray.show()
+
+        self.api = LocalApi(self._api_status)
+        self.api.signals.command.connect(self._on_api_command)
+        self.api.signals.log.connect(self.toast)
+        self.apply_api_settings()
+
+        QShortcut(QKeySequence("F5"), self, self.start_index)
+        QShortcut(QKeySequence("Ctrl+F"), self, self._focus_search)
+
+        # The app opens on the front door rather than straight into the wall of
+        # photographs. Photos is one click away and keeps every level it had.
+        self.activate("home")
+
+        if not cfg.get("onboarded"):
+            self.welcome = Welcome(self)
+            self.welcome.finished.connect(self._finish_onboarding)
+            self.welcome.setGeometry(root.rect())
+            self.welcome.show()
+            self.welcome.raise_()
+        elif auto_index:
+            QTimer.singleShot(150, self.start_index)
+
+        if auto_index and cfg.get("check_updates"):
+            QTimer.singleShot(4000, self.check_for_update)
+
+    # ---------------- the two shells ----------------
+    def _modern_shell(self):
+        """Floating sidebar and content panels, the window buttons in a strip
+        above the content column."""
         # The sidebar rises to the top margin so the window has the same border
         # all the way round; the window buttons live in a slim strip above the
         # content column, where they cost no vertical space of their own.
@@ -152,7 +268,6 @@ class MainWindow(QMainWindow):
         rl.setContentsMargins(self.EDGE, self.EDGE, self.EDGE, self.EDGE)
         rl.setSpacing(self.EDGE)
         self.setCentralWidget(root)
-        self.titlebar = widgets.TitleBar(self)
 
         # ---------------- sidebar ----------------
         side = QFrame()
@@ -236,90 +351,73 @@ class MainWindow(QMainWindow):
         self.stack = QStackedWidget()
         cv.addWidget(self.stack, 1)
         rl.addWidget(col, 1)
+        return root
 
-        self.page_home = HomePage(self, self.cache)
-        self.live_pill = LivePill(self)
-        self.titlebar.set_center(self.live_pill)
-        self.page_grid = GridPage(self, self.cache)
-        self.page_memories = MemoriesPage(self, self.cache)
-        self.page_albums = AlbumsPage(self, self.cache)
-        self.page_moments = MomentsPage(self, self.cache)
-        self.page_person = PersonPage(self, self.cache)
-        self.page_sessions = SessionsPage(self, self.cache)
-        self.page_worlds = WorldsPage(self, self.cache)
-        self.page_people = PeoplePage(self, self.cache)
-        self.page_avatars = AvatarsPage(self, self.cache)
-        self.page_stats = StatsPage(self)
-        self.page_cleanup = CleanupPage(self, self.cache)
-        self.page_settings = SettingsPage(self)
-        for p in (self.page_home, self.page_grid, self.page_memories, self.page_albums, self.page_moments,
-                  self.page_person, self.page_sessions, self.page_worlds, self.page_people,
-                  self.page_avatars, self.page_stats, self.page_cleanup,
-                  self.page_settings):
-            self.stack.addWidget(p)
-        self.page_grid.back_requested.connect(self.pop_drill)
+    def _classic_shell(self):
+        """The window of 1995 (the Windows 95 look; see classic.py): a 3D frame,
+        the navy caption across the top, the folder tree on the left in a white
+        well, the pages beside it, a status bar along the bottom."""
+        from . import classic
+        root = classic.WindowFrame(self)
+        vl = QVBoxLayout(root)
+        vl.setContentsMargins(4, 4, 4, 4)
+        vl.setSpacing(0)
+        self.setCentralWidget(root)
+        vl.addWidget(self.titlebar)
 
-        self.lightbox = Lightbox(self)
-        self.slideshow = Slideshow(cfg)
-        self.toast_w = widgets.Toast(self)
-        self.toast_w.set_glass_source(self.stack)   # it floats over the page
+        body = QWidget()
+        bl = QHBoxLayout(body)
+        bl.setContentsMargins(0, 4, 0, 2)
+        bl.setSpacing(4)
+        side = QWidget()
+        side.setFixedWidth(200)
+        sv = QVBoxLayout(side)
+        sv.setContentsMargins(0, 0, 0, 0)
+        sv.setSpacing(6)
+        well = classic.Sunken()
+        wl = QVBoxLayout(well)
+        wl.setContentsMargins(2, 2, 2, 2)
+        labels = {e[0]: e[1] for e in NAV if e is not None}
+        labels["settings"] = "Settings"
+        self.nav_tree = classic.NavTree(labels)
+        self.nav_tree.picked.connect(self.activate)
+        wl.addWidget(self.nav_tree)
+        sv.addWidget(well, 1)
+        brow = QHBoxLayout()
+        brow.setSpacing(6)
+        b_refresh = QPushButton("Refresh")
+        b_refresh.setToolTip("Look for new photos (F5)")
+        b_refresh.clicked.connect(self.start_index)
+        b_folder = QPushButton("Open folder")
+        b_folder.setToolTip("Open the photo folder in Explorer")
+        b_folder.clicked.connect(self._open_photo_folder)
+        brow.addWidget(b_refresh)
+        brow.addWidget(b_folder)
+        sv.addLayout(brow)
+        bl.addWidget(side)
+        self.stack = QStackedWidget()
+        bl.addWidget(self.stack, 1)
+        vl.addWidget(body, 1)
 
-        # ---------------- wiring ----------------
-        self.bridge.index_progress.connect(self._on_index_progress)
-        self.bridge.index_done.connect(self._on_index_done)
-        self.bridge.toast.connect(self.toast)
-        self.bridge.meta_changed.connect(self._on_meta_changed)
-        self.bridge.deep_progress.connect(self._on_deep_progress)
-        self.bridge.year_ready.connect(self._on_year_ready)
-        self.bridge.reindex_needed.connect(self.start_index)
-        self.bridge.headset_found.connect(self._on_headset_found)
-        self.bridge.sheet_ready.connect(self._on_sheet_ready)
-        self.bridge.backup_planned.connect(self._on_backup_planned)
-        self.bridge.update_available.connect(self._on_update_available)
+        self.statusbar = classic.StatusBar()
+        self.lab_status = classic.StatusPanel("")
+        # a status bar is never blank: what the library holds, until the first
+        # index pass has something newer to say
+        try:
+            n, size, _f = self.db.counts()
+            self.lab_status.setText(f"{fmt.count_label(n)} photos · {fmt.human_size(size)}")
+        except Exception:
+            pass
+        self.statusbar.add(self.lab_status, 1)
+        vl.addWidget(self.statusbar)
+        return root
 
-        # --no-index keeps a throwaway copy of a library exactly as it is, which
-        # is what documentation screenshots need
-        # Not on a first run: the welcome card has not been answered yet, and the
-        # folder it offers to change is the one the watcher would poll.
-        self.watcher = None
-        if auto_index and cfg.get("onboarded"):
-            self.watcher = LiveWatcher(cfg, self)
-            self.watcher.changed.connect(self._on_watch_changed)
-
-        # ---------------- tray + local API ----------------
-        self._quitting = False
-        self.tray = Tray(self)
-        self.tray.show_window.connect(self.show_from_tray)
-        self.tray.open_page.connect(lambda k: (self.show_from_tray(), self.activate(k)))
-        self.tray.reindex.connect(self.start_index)
-        self.tray.slideshow.connect(self._slideshow_favorites)
-        self.tray.wallpaper.connect(lambda: self.act_wallpaper())
-        self.tray.quit_app.connect(self.quit_app)
-        self.tray.show()
-
-        self.api = LocalApi(self._api_status)
-        self.api.signals.command.connect(self._on_api_command)
-        self.api.signals.log.connect(self.toast)
-        self.apply_api_settings()
-
-        QShortcut(QKeySequence("F5"), self, self.start_index)
-        QShortcut(QKeySequence("Ctrl+F"), self, self._focus_search)
-
-        # The app opens on the front door rather than straight into the wall of
-        # photographs. Photos is one click away and keeps every level it had.
-        self.activate("home")
-
-        if not cfg.get("onboarded"):
-            self.welcome = Welcome(self)
-            self.welcome.finished.connect(self._finish_onboarding)
-            self.welcome.setGeometry(root.rect())
-            self.welcome.show()
-            self.welcome.raise_()
-        elif auto_index:
-            QTimer.singleShot(150, self.start_index)
-
-        if auto_index and cfg.get("check_updates"):
-            QTimer.singleShot(4000, self.check_for_update)
+    def _open_photo_folder(self):
+        folders = [f for f in self.cfg.folders if os.path.isdir(f)]
+        if folders:
+            winutil.open_file(folders[0])
+        else:
+            self.toast("No photo folder yet: add one in Settings", "err")
 
     # ---------------- navigation ----------------
     def activate(self, key):
@@ -327,6 +425,8 @@ class MainWindow(QMainWindow):
         self._current_key = key
         for k, b in self._nav_buttons.items():
             b.setChecked(k == key)
+        if getattr(self, "nav_tree", None) is not None:
+            self.nav_tree.select(key)
         if key == "home":
             self.page_home.refresh()
             self._show_page(self.page_home)
@@ -612,6 +712,22 @@ class MainWindow(QMainWindow):
         self._quitting = True
         self.close()
         QApplication.quit()
+
+    def restart_app(self):
+        """Start a fresh copy and close this one -- for a change that is only
+        read at start-up (the Windows 95 look). The new copy is told it was
+        restarted, so it waits for this one's lock instead of taking it for
+        another copy that is running."""
+        import sys
+        from PySide6.QtCore import QProcess
+        args = restart_args(sys.argv[1:])
+        if not getattr(sys, "frozen", False):
+            args = [os.path.abspath(sys.argv[0])] + args
+        res = QProcess.startDetached(sys.executable, args, os.getcwd())
+        if not (res[0] if isinstance(res, tuple) else res):
+            self.toast("Could not restart: close and reopen the app", "err")
+            return
+        self.quit_app()
 
     def _slideshow_favorites(self):
         rows = self.db.query_photos(PhotoFilter(favorites=True))
@@ -1357,6 +1473,8 @@ class MainWindow(QMainWindow):
         # and GetWindowLong on a null handle silently does nothing.
         global _SNAP_INSTALLED
         if not self._snap_ready:
+            if style.CLASSIC:
+                winutil.round_corners(int(self.winId()), False)   # 1995 was square
             self._snap_ready = winutil.snap_styles(int(self.winId()))
             if self._snap_ready:
                 _SNAP_FILTER.watch(int(self.winId()))
@@ -1371,8 +1489,14 @@ class MainWindow(QMainWindow):
         if ev.type() == ev.Type.WindowStateChange and hasattr(self, "titlebar"):
             self.titlebar.sync()
             # a maximised window has no border to grab, and its corners are square
-            gap = 0 if self.isMaximized() else self.EDGE
             lay = self.centralWidget().layout()
+            if style.CLASSIC:
+                gap = 0 if self.isMaximized() else 4
+                lay.setContentsMargins(gap, gap, gap, gap)
+                self.centralWidget().update()
+                winutil.round_corners(self.winId(), False)
+                return
+            gap = 0 if self.isMaximized() else self.EDGE
             lay.setContentsMargins(gap, gap, gap, gap)
             lay.setSpacing(self.EDGE)
             winutil.round_corners(self.winId(), not self.isMaximized())

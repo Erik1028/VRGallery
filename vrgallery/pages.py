@@ -1832,6 +1832,30 @@ class SettingsPage(QWidget):
 
         # appearance
         card_look = widgets.Card("APPEARANCE")
+        # The Windows 95 look, as Mixtape has it: applied at start-up, so a
+        # change asks to restart (see classic.py)
+        krow = QHBoxLayout()
+        krow.setSpacing(6)
+        krow.addWidget(QLabel("Look:"))
+        self._skins = []
+        for key, label in (("modern", "Modern"), ("win95", "Windows 95")):
+            b = QPushButton(label)
+            b.setObjectName("PillBtn")
+            b.setCheckable(True)
+            b.setChecked((self.main.cfg.get("skin") or "modern") == key)
+            b.setCursor(Qt.PointingHandCursor)
+            b.clicked.connect(lambda _c=False, k=key: self._set_skin(k))
+            self._skins.append((key, b))
+            krow.addWidget(b)
+        krow.addStretch(1)
+        card_look.vbox.addLayout(krow)
+        skin_note = QLabel(
+            "Windows 95 dresses the whole window the way a program looked in 1995: grey "
+            "panels with 3D edges, square corners, navy selection and the era's typeface. "
+            "Takes effect after a restart.")
+        skin_note.setWordWrap(True)
+        skin_note.setStyleSheet("color:%s; font-size:12px;" % style.PAL["faint"])
+        card_look.vbox.addWidget(skin_note)
         row = QHBoxLayout()
         row.setSpacing(10)
         lab = QLabel("Accent color:")
@@ -1861,6 +1885,14 @@ class SettingsPage(QWidget):
             trow.addWidget(dot)
         trow.addStretch(1)
         card_look.vbox.addLayout(trow)
+        if style.CLASSIC:
+            # one palette of its own; the choices wait for the Modern look
+            for _k, d in self._dots + self._themes:
+                d.setEnabled(False)
+            wait = QLabel("The Windows 95 look has one palette of its own. The accent "
+                          "colour and the theme are used by the Modern look.")
+            wait.setWordWrap(True)
+            card_look.vbox.addWidget(wait)
         v.addWidget(card_look)
 
         # sharing
@@ -2200,6 +2232,19 @@ class SettingsPage(QWidget):
         self.ed_hook.setEchoMode(
             QLineEdit.Normal if self.ed_hook.echoMode() == QLineEdit.Password
             else QLineEdit.Password)
+
+    def _set_skin(self, key):
+        for k, b in self._skins:
+            b.setChecked(k == key)
+        if (self.main.cfg.get("skin") or "modern") == key:
+            return
+        self.main.cfg.set("skin", key)
+        ans = QMessageBox.question(
+            self, paths.APP_NAME,
+            "The look changes after a restart. Restart %s now?" % paths.APP_NAME,
+            QMessageBox.Yes | QMessageBox.No, QMessageBox.Yes)
+        if ans == QMessageBox.Yes:
+            self.main.restart_app()
 
     def _set_palette(self, key):
         self.main.set_palette(key)

@@ -45,7 +45,7 @@ def _section(title, note=""):
     """The small capitalised label every block on this page wears."""
     row = QHBoxLayout()
     row.setSpacing(8)
-    lab = QLabel(title)
+    lab = QLabel(style.caps(title))
     lab.setObjectName("SectionLabel")
     row.addWidget(lab)
     row.addStretch(1)
@@ -322,7 +322,7 @@ class SittingCard(QFrame):
         col.setContentsMargins(0, 0, 0, 0)
         col.setSpacing(7)
 
-        head = QLabel(sitting_label(sit["start"], sit["end"], live, now))
+        head = QLabel(style.caps(sitting_label(sit["start"], sit["end"], live, now)))
         head.setObjectName("SectionLabel")
         if live:
             head.setStyleSheet("color:%s;" % style.PAL["ok"])
@@ -797,6 +797,17 @@ class LivePill(Clickable):
         self.setMinimumWidth(240)
         self.setMaximumWidth(self.MAX_W)
         self.setSizePolicy(QSizePolicy.Expanding, QSizePolicy.Fixed)
+        self._key = None
+        self._sit = None
+        self._live = False
+        self._dirty = False
+        self._clock = QTimer(self)
+        self._clock.setInterval(60000)
+        self._clock.timeout.connect(self.refresh)
+        if style.CLASSIC:
+            self._classic_layout()
+            self.hide()
+            return
         lay = QHBoxLayout(self)
         lay.setContentsMargins(self.INSET, 0, 12, 0)
         lay.setSpacing(10)
@@ -817,14 +828,39 @@ class LivePill(Clickable):
         lay.addLayout(col, 1)
         self._dot = _PillDot(self)
         self._dot.hide()
-        self._key = None
-        self._sit = None
-        self._live = False
-        self._dirty = False
-        self._clock = QTimer(self)
-        self._clock.setInterval(60000)
-        self._clock.timeout.connect(self.refresh)
         self.hide()                  # until there is a sitting to talk about
+
+    def _classic_layout(self):
+        """The Windows 95 look: a sunken panel of the status bar -- the globe,
+        the world, then the state and the facts, on one line."""
+        from . import classic
+        self.setFixedHeight(classic.STATUS_H - 2)
+        self.setMinimumWidth(200)
+        self.setMaximumWidth(560)
+        lay = QHBoxLayout(self)
+        lay.setContentsMargins(3, 0, 6, 0)
+        lay.setSpacing(5)
+        self._tile = QLabel()
+        self._tile.setFixedSize(16, 16)
+        self._tile.setPixmap(classic.icon("globe"))
+        lay.addWidget(self._tile, 0, Qt.AlignVCenter)
+        self._title = widgets.ElidedLabel("")
+        lay.addWidget(self._title, 0)
+        self._sub = _PillFacts()
+        self._sub.setFixedHeight(16)
+        lay.addWidget(self._sub, 1)
+        self._dot = QWidget(self)    # 1995 had no presence dot; the tag says it
+        self._dot.hide()
+
+    def paintEvent(self, ev):
+        if style.CLASSIC:
+            from PySide6.QtGui import QPainter
+            from . import classic
+            p = QPainter(self)
+            classic.bevel(p, self.rect(), "thin")
+            p.end()
+            return
+        super().paintEvent(ev)
 
     # a press here is a click on the pill, not the start of a window drag: the
     # title bar under it turns every unclaimed press into startSystemMove, and
@@ -858,6 +894,9 @@ class LivePill(Clickable):
         dot.raise_()
 
     def _sync(self):
+        if style.CLASSIC:
+            self.update()            # painted: a sunken status-bar panel
+            return
         P = style.PAL
         self.setStyleSheet(
             "QFrame#LivePill { background:%s; border:1px solid %s; border-radius:10px; }"
@@ -912,10 +951,13 @@ class LivePill(Clickable):
         else:
             # a step brighter than `faint`, which fell under 4.5:1 on hover
             f.tag, f.tag_colour = "LAST IN VRCHAT", _blend(P["faint"], P["dim"], 0.55)
+        if style.CLASSIC:
+            f.tag = "In VRChat:" if live else "Last in VRChat:"
+            f.tag_colour = P["ok"] if live else P["text"]
         f.fact_colour, f.sep_colour = P["dim"], P["faint"]
         f.updateGeometry()
         f.update()
-        self._dot.setVisible(live)
+        self._dot.setVisible(live and not style.CLASSIC)
         self._place_dot()
         self._sync()
 
@@ -1069,8 +1111,10 @@ class _PillFacts(widgets.ElidedLabel):
         px = self.font().pixelSize()
         if px <= 0:
             px = QFontInfo(self.font()).pixelSize()
-        f.setPixelSize(max(9, px - 1))
         f.setWeight(QFont.Bold)
+        if style.CLASSIC:
+            return f                 # 1995's bold, at the line's own size
+        f.setPixelSize(max(9, px - 1))
         f.setLetterSpacing(QFont.AbsoluteSpacing, self.SPACING)
         return f
 
@@ -1078,8 +1122,9 @@ class _PillFacts(widgets.ElidedLabel):
         from PySide6.QtGui import QFontMetricsF
         if not self.tag:
             return 0.0
+        spacing = 0.0 if style.CLASSIC else self.SPACING
         return (QFontMetricsF(self._tag_font()).horizontalAdvance(self.tag)
-                - self.SPACING + self.GAP)
+                - spacing + self.GAP)
 
     def full_width(self):
         # Digits measured as zeros: the clock in this line changes every
