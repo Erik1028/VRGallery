@@ -25,7 +25,11 @@ class Welcome(QWidget):
 
         outer = QVBoxLayout(self)
         outer.setAlignment(Qt.AlignCenter)
-        card = QFrame()
+        if style.CLASSIC:
+            from . import classic
+            card = classic.Bevelled("window", classic.FACE)   # a window of 1995
+        else:
+            card = QFrame()
         card.setObjectName("Card")
         card.setFixedWidth(660)
         v = QVBoxLayout(card)

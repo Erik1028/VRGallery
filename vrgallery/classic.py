@@ -88,6 +88,9 @@ def apply(app):
             pal.setColor(grp, role, QColor(ink))
     app.setPalette(pal)
     app.setFont(font())
+    for cls in ("QMenu", "QMenuBar", "QMessageBox", "QTipLabel", "QStatusBar",
+                "QAbstractItemView", "QHeaderView", "QComboBox", "QLineEdit"):
+        app.setFont(font(), cls)
     _square_everything()
     global _CAPTIONS
     _CAPTIONS = _Captions(app)
@@ -208,7 +211,7 @@ def qss():
     Windows style draws, so that the style keeps drawing it."""
     return f"""
 * {{ outline: none; }}
-QWidget {{ color: {DARK}; font-family: '{FONT_FAMILY}'; font-size: 11px; }}
+QWidget {{ font-family: '{FONT_FAMILY}'; font-size: 11px; }}
 QMainWindow, #Root {{ background: {FACE}; }}
 #TitleBar {{ background: {NAVY}; }}
 #TitleBarText {{ color: {HI}; font-weight: bold; }}
@@ -219,10 +222,12 @@ QMainWindow, #Root {{ background: {FACE}; }}
 #GridStatus, #SidebarStatus {{ color: {DARK}; }}
 QPushButton#PrimaryBtn {{ font-weight: bold; }}
 QPushButton#DangerBtn {{ color: #800000; }}
+QPushButton#DangerBtn:disabled {{ color: {SHADOW}; }}
 QPushButton#LinkBtn {{
     background: transparent; border: none; color: #0000ff; text-decoration: underline;
 }}
 QListView, QScrollArea {{ background: transparent; border: none; }}
+QComboBox QAbstractItemView {{ background: {HI}; border: 1px solid {DARK}; }}
 QLineEdit#SearchBox {{ padding-left: 20px; }}
 QToolTip {{
     background: {INFO}; color: {DARK}; border: 1px solid {DARK}; padding: 1px 2px;
@@ -304,8 +309,9 @@ class WindowFrame(QWidget):
         p.end()
 
 
-class Sunken(QFrame):
-    """A white well with a sunken edge -- the tree sits in one."""
+class Bevelled(QFrame):
+    """A frame with a 1995 edge: a white sunken well (the tree sits in one), or
+    a raised panel on the face (the welcome card)."""
 
     def __init__(self, kind="sunken", fill=HI, parent=None):
         super().__init__(parent)
@@ -318,6 +324,9 @@ class Sunken(QFrame):
         bevel(p, self.rect(), self._kind)
         p.end()
         super().paintEvent(ev)
+
+
+Sunken = Bevelled
 
 
 # ---------------------------------------------------------------- pixel icons
@@ -739,6 +748,8 @@ class NavTree(QTreeWidget):
         self.setVerticalScrollMode(QTreeWidget.ScrollPerPixel)
         self.setHorizontalScrollBarPolicy(Qt.ScrollBarAlwaysOff)
         self._items = {}
+        self._page = None            # the page the tree shows as open
+        self._changed = False        # this click already opened a page
 
         def leaf(key, parent_item=None):
             it = QTreeWidgetItem([labels.get(key, key)])
@@ -766,21 +777,34 @@ class NavTree(QTreeWidget):
     def _on_click(self, item, _col):
         key = item.data(0, Qt.UserRole)
         if key is None:
+            # a folder opens and closes; the page stays the highlighted one
             item.setExpanded(not item.isExpanded())
+            self.select(self._page)
+        elif not self._changed:
+            # the page already highlighted: after a drill-down into a world or
+            # a person it is the way back, as a sidebar button is in Modern
+            self.picked.emit(key)
+        self._changed = False
 
     def _on_current(self, cur, _prev):
         key = cur.data(0, Qt.UserRole) if cur is not None else None
         if key:
+            self._changed = True
+            self._page = key
             self.picked.emit(key)
 
     def select(self, key):
-        """Show `key` as the open page without asking to open it again."""
-        it = self._items.get(key)
+        """Show `key` as the open page without asking to open it again; None
+        shows none (a drill-down, which no page in the tree is)."""
+        from PySide6.QtCore import QModelIndex
+        it = self._items.get(key) if key else None
+        self._page = key if it is not None else None
         self.blockSignals(True)
         try:
             if it is not None:
                 self.setCurrentItem(it)
             else:
+                self.setCurrentIndex(QModelIndex())
                 self.clearSelection()
         finally:
             self.blockSignals(False)

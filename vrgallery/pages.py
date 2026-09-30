@@ -23,6 +23,12 @@ CardRole = Qt.UserRole + 1
 REGION_NAMES = vrclog.REGION_NAMES
 
 
+def _private_ink():
+    """A private instance's line: the star gold in Modern; on the 1995 grey
+    that olive was 2.3:1, so maroon there."""
+    return "#800000" if style.CLASSIC else style.PAL["star"]
+
+
 def page_header(title, sub=""):
     box = QVBoxLayout()
     box.setSpacing(0)
@@ -393,7 +399,7 @@ class SessionsPage(QWidget):
             badge = QLabel(("🔒 " if private else "") +
                            vrclog.INSTANCE_LABELS.get(itype, itype))
             badge.setStyleSheet(
-                "color:%s; font-size:11px;" % (style.PAL["star"] if private
+                "color:%s; font-size:11px;" % (_private_ink() if private
                                                else style.PAL["faint"]))
             top.addWidget(badge)
         top.addStretch(1)
@@ -2236,9 +2242,13 @@ class SettingsPage(QWidget):
     def _set_skin(self, key):
         for k, b in self._skins:
             b.setChecked(k == key)
-        if (self.main.cfg.get("skin") or "modern") == key:
+        if (self.main.cfg.get("skin") or "modern") != key:
+            self.main.cfg.set("skin", key)
+        # asked against the look that is RUNNING, not the saved choice: after a
+        # "No" the same click is how to restart after all, and picking the look
+        # already on screen needs no restart
+        if key == ("win95" if style.CLASSIC else "modern"):
             return
-        self.main.cfg.set("skin", key)
         ans = QMessageBox.question(
             self, paths.APP_NAME,
             "The look changes after a restart. Restart %s now?" % paths.APP_NAME,

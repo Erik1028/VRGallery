@@ -1133,7 +1133,7 @@ class GridView(QListView):
             f.setPointSizeF(9.5)
             f.setWeight(QFont.Bold)
             p.setFont(f)
-            p.setPen(QColor("#0b0e14"))
+            p.setPen(QColor("#ffffff" if style.CLASSIC else "#0b0e14"))
             p.drawText(badge, Qt.AlignCenter, str(len(items)))
         p.end()
         return out

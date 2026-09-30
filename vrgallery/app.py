@@ -66,11 +66,14 @@ def main(argv=None):
 
     lock = QLockFile(paths.LOCK_PATH)
     lock.setStaleLockTime(0)
-    if not args.shot and not lock.tryLock(10000 if args.restarted else 100):
+    if not args.shot and not lock.tryLock(60000 if args.restarted else 100):
         # Clicking the icon again should bring the app up, not tell you off for
         # clicking it. The box is only for the case where the running copy
         # cannot be found -- a stale lock, or a window that never opened.
-        if winutil.signal_existing_instance():
+        # Never for a restart: the copy holding the lock is the one that asked
+        # for it and is closing, and a "come to the front" posted to it would
+        # be lost with it -- leaving no copy running at all.
+        if not args.restarted and winutil.signal_existing_instance():
             return 0
         QMessageBox.information(None, paths.APP_NAME, paths.APP_NAME + " is already running.")
         return 0
@@ -114,7 +117,8 @@ def main(argv=None):
     # when the user really means it, so we never strand a headless process.
     app.setQuitOnLastWindowClosed(False)
 
-    start_hidden = bool(args.tray) or (bool(cfg.get("start_minimized")) and not args.shot)
+    start_hidden = bool(args.tray) or (bool(cfg.get("start_minimized")) and not args.shot
+                                       and not args.restarted)
     if start_hidden:
         win.tray.notify(paths.APP_NAME,
                         "Running in the tray — watching for new VRChat screenshots.")
@@ -124,7 +128,7 @@ def main(argv=None):
     else:
         win.show()
         winutil.dark_titlebar(win.winId())
-        winutil.round_corners(win.winId(), True)
+        winutil.round_corners(win.winId(), not style.CLASSIC)
 
     if args.shot:
         def snap():

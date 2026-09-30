@@ -841,6 +841,8 @@ class PageHead(QWidget):
         self._title_fit = 10 ** 6   # what `fit` will spare the title
         self._title_open = 1.0      # ...and what `apply_collapse` leaves of it
 
+        if style.CLASSIC:
+            self.MARGIN = 0      # flush and flat: 1995 had no floating panels
         col = QVBoxLayout(self)
         col.setContentsMargins(0, 0, 0, self.MARGIN)   # room for the shadow
         col.setSpacing(0)
@@ -1191,6 +1193,12 @@ class PageHead(QWidget):
         self._placed = key
         self.setGeometry(geo)
         self.fit()
+        # fit() can bring the subtitle back after the height was taken from a
+        # sizeHint without it: the title column was then squeezed and cut its
+        # descenders ("Cleanuo")
+        h = self.sizeHint().height()
+        if h != self.height():
+            self.resize(self.width(), h)
         self.raise_()
 
     def _title_natural(self):
@@ -1803,7 +1811,8 @@ def ghost_btn(text, icon_name=None, parent=None, danger=False, primary=False):
     b.setObjectName("PrimaryBtn" if primary else ("DangerBtn" if danger else "GhostBtn"))
     b.setCursor(Qt.PointingHandCursor)
     if icon_name:
-        color = "#ffffff" if primary else (style.PAL["danger"] if danger else style.PAL["dim"])
+        color = ("#ffffff" if not style.CLASSIC else style.PAL["text"]) if primary \
+            else (style.PAL["danger"] if danger else style.PAL["dim"])
         b.setIcon(icons.qicon(icon_name, color, 16, pad=ICON_GAP))
         b.setIconSize(QSize(16 + ICON_GAP, 16))
     return b
@@ -1888,6 +1897,8 @@ class GradientDot(QWidget):
     def paintEvent(self, _ev):
         p = QPainter(self)
         p.setRenderHint(QPainter.Antialiasing)
+        if not self.isEnabled():
+            p.setOpacity(0.35)
         from PySide6.QtGui import QLinearGradient
         g = QLinearGradient(0, 0, self.width(), self.height())
         g.setColorAt(0, QColor(self.a))
