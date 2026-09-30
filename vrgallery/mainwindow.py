@@ -489,6 +489,8 @@ class MainWindow(QMainWindow):
             self._drill_from = self._current_key
         for b in self._nav_buttons.values():
             b.setChecked(False)
+        if getattr(self, "nav_tree", None) is not None:
+            self.nav_tree.select(None)
         self.page_grid.configure(f, title, back=True)
         self._show_page(self.page_grid)
 
@@ -516,6 +518,8 @@ class MainWindow(QMainWindow):
         self._drill_from = self._current_key or "people"
         for b in self._nav_buttons.values():
             b.setChecked(False)
+        if getattr(self, "nav_tree", None) is not None:
+            self.nav_tree.select(None)
         self.page_person.show_person(name)
         self._show_page(self.page_person)
 
@@ -721,9 +725,13 @@ class MainWindow(QMainWindow):
         import sys
         from PySide6.QtCore import QProcess
         args = restart_args(sys.argv[1:])
+        exe = sys.executable
         if not getattr(sys, "frozen", False):
-            args = [os.path.abspath(sys.argv[0])] + args
-        res = QProcess.startDetached(sys.executable, args, os.getcwd())
+            here = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
+            args = [os.path.join(here, "run.py")] + args
+            pyw = os.path.join(os.path.dirname(sys.executable), "pythonw.exe")
+            exe = pyw if os.path.exists(pyw) else sys.executable
+        res = QProcess.startDetached(exe, args, os.getcwd())
         if not (res[0] if isinstance(res, tuple) else res):
             self.toast("Could not restart: close and reopen the app", "err")
             return
@@ -894,8 +902,8 @@ class MainWindow(QMainWindow):
             return
         captioned = bool(self.cfg.get("share_captioned"))
         people = self._photo_people(item) if captioned else []
-        accent = (style.accent(self.cfg.get("accent"))["a"],
-                  style.accent(self.cfg.get("accent"))["b"])
+        accent = (style.saved_accent(self.cfg.get("accent"))["a"],
+                  style.saved_accent(self.cfg.get("accent"))["b"])
         bridge = self.bridge
         self.toast("Sending to Discord…", "info")
 
@@ -936,7 +944,7 @@ class MainWindow(QMainWindow):
         if not out:
             return
         people = self._photo_people(item)
-        ac = style.accent(self.cfg.get("accent"))
+        ac = style.saved_accent(self.cfg.get("accent"))
         bridge = self.bridge
         self.toast("Rendering…", "info")
 
@@ -964,7 +972,7 @@ class MainWindow(QMainWindow):
                 QMessageBox.Yes | QMessageBox.No) != QMessageBox.Yes:
             return
         people = self._photo_people(item)
-        ac = style.accent(self.cfg.get("accent"))
+        ac = style.saved_accent(self.cfg.get("accent"))
         cmd = (self.cfg.get("frame_publish_cmd") or "").strip()
         captioned = bool(self.cfg.get("frame_captioned"))
         max_px = int(self.cfg.get("frame_max_px") or 2048)
@@ -1243,7 +1251,7 @@ class MainWindow(QMainWindow):
         if not out:
             return
         entries = [(r["path"], r["mtime"], r["filesize"]) for r in rows[:24]]
-        ac = style.accent(self.cfg.get("accent"))
+        ac = style.saved_accent(self.cfg.get("accent"))
         bridge = self.bridge
         self.toast("Building the contact sheet…", "info")
 
@@ -1335,7 +1343,7 @@ class MainWindow(QMainWindow):
 
     # ---------------- year in review ----------------
     def build_year_review(self, year):
-        ac = style.accent(self.cfg.get("accent"))
+        ac = style.saved_accent(self.cfg.get("accent"))
         selfn = sorted(self.cfg.self_names)
         bridge = self.bridge
         db = self.db

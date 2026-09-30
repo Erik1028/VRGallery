@@ -175,7 +175,8 @@ class ImageView(QWidget):
         p.setPen(QPen(QColor(255, 255, 255, 60), 1) if on else Qt.NoPen)
         p.setBrush(QColor(style.ACTIVE["a"]) if on else QColor(12, 14, 20, 190))
         p.drawRoundedRect(box, 15, 15)
-        fg = "#0b0e14" if on else "#e9ecf5"
+        # dark on the Modern accents, white on 1995's navy
+        fg = ("#ffffff" if style.CLASSIC else "#0b0e14") if on else "#e9ecf5"
         glyph = icons.pixmap("users", fg, 15, self.devicePixelRatioF())
         p.drawPixmap(int(box.x() + 11), int(box.center().y() - 7.5), glyph)
         p.setPen(QColor(fg))
@@ -797,8 +798,8 @@ class Lightbox(QWidget):
             self.p_instance.setText(
                 ("🔒 " if private else "") + label + " instance" + where)
             self.p_instance.setStyleSheet(
-                "color:%s; font-size:11px;" % (style.PAL["star"] if private
-                                               else style.PAL["faint"]))
+                "color:%s; font-size:11px;" % (("#800000" if style.CLASSIC else style.PAL["star"])
+                                               if private else style.PAL["faint"]))
         self.p_instance.setVisible(bool(itype))
         self.btn_world_link.setVisible(bool(it.world_id))
         shot_by = (row["author_name"] if row and "author_name" in row.keys() else None)

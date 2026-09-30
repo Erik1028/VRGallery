@@ -132,6 +132,39 @@ CHILD = textwrap.dedent(r'''
     cap.show()
     app.processEvents()
     out["caption"] = cap.text()
+    # the review (2026-09-30): after a drill-down the highlighted page was dead
+    from PySide6.QtCore import QPoint, Qt as _Qt
+    from PySide6.QtTest import QTest
+    def click(key_or_item):
+        it = t._items[key_or_item] if isinstance(key_or_item, str) else key_or_item
+        r = t.visualItemRect(it)
+        QTest.mouseClick(t.viewport(), _Qt.LeftButton, _Qt.NoModifier,
+                         QPoint(r.x() + 30, r.center().y()))
+        app.processEvents()
+    click("worlds")
+    out["click_opens_worlds"] = win.stack.currentWidget() is win.page_worlds
+    win.push_world("wrld_x", "Some world")
+    app.processEvents()
+    out["drill_clears_tree"] = t.currentItem() is None
+    click("worlds")
+    out["click_after_drill_goes_back"] = win.stack.currentWidget() is win.page_worlds
+    win.push_world("wrld_x", "Some world")
+    app.processEvents()
+    t.select("worlds")              # as if the tree still showed it
+    click("worlds")
+    out["click_on_current_navigates"] = win.stack.currentWidget() is win.page_worlds
+    folder = t.topLevelItem(1)       # Library
+    click(folder)
+    out["folder_click_keeps_page"] = (t.currentItem() is t._items["worlds"]
+                                      and t._items["worlds"].isSelected())
+    out["saved_accent"] = style.saved_accent("orchid")["a"]
+    out["qwidget_rule"] = [l for l in classic.qss().splitlines() if l.startswith("QWidget {")][0]
+    from vrgallery import widgets as _w
+    b = _w.ghost_btn("Go", "check", primary=True)
+    img = b.icon().pixmap(16, 16).toImage()
+    out["primary_icon_dark"] = max(img.pixelColor(x, y).lightness()
+                                   for x in range(img.width()) for y in range(img.height())
+                                   if img.pixelColor(x, y).alpha() > 200) < 100
     win.titlebar.toggle_max()
     app.processEvents()
     out["max_glyph"] = win.titlebar.btn_max.glyph
@@ -187,6 +220,36 @@ def test_corners_are_square(classic_window):
     assert "11px" in classic_window["inline_css"]
 
 
+def test_the_highlighted_page_is_always_a_way_back(classic_window):
+    """After a drill-down into a world the tree showed Worlds and clicking it
+    did nothing; Back was the only way out (review, 2026-09-30)."""
+    w = classic_window
+    assert w["click_opens_worlds"]
+    assert w["drill_clears_tree"], "a drill-down left a page highlighted"
+    assert w["click_after_drill_goes_back"]
+    assert w["click_on_current_navigates"], "a click on the highlighted page did nothing"
+
+
+def test_a_folder_click_leaves_the_open_page_highlighted(classic_window):
+    assert classic_window["folder_click_keeps_page"]
+
+
+def test_menus_and_disabled_text_take_their_colours_from_the_palette(classic_window):
+    """A stylesheet colour on QWidget overrode the palette in every state: the
+    hovered menu item was black on navy, disabled text stayed black."""
+    assert "color" not in classic_window["qwidget_rule"]
+
+
+def test_exports_keep_the_chosen_accent(classic_window):
+    """Posters and contact sheets keep their dark ground in 1995 too; navy on
+    it was 1.2:1."""
+    assert classic_window["saved_accent"] == "#c064ff"
+
+
+def test_a_primary_buttons_icon_is_dark_on_the_grey_face(classic_window):
+    assert classic_window["primary_icon_dark"]
+
+
 def test_captions_shown_once_are_not_shouted(classic_window):
     assert classic_window["caption"] == "Where you meet"
 
@@ -228,7 +291,7 @@ def test_choosing_windows_95_saves_it_and_offers_a_restart(modern, monkeypatch):
     assert not restarted, "restarted although the answer was No"
     assert [b.isChecked() for _k, b in s._skins] == [False, True]
     monkeypatch.setattr(pages.QMessageBox, "question", lambda *a, **k: QMessageBox.Yes)
-    s._set_skin("modern")
+    s._set_skin("win95")             # asked again, and this time Yes
     assert restarted == [1]
 
 
@@ -237,6 +300,39 @@ def test_picking_the_look_already_on_does_not_ask(modern, monkeypatch):
     monkeypatch.setattr(pages.QMessageBox, "question",
                         lambda *a, **k: (_ for _ in ()).throw(AssertionError("asked")))
     modern.page_settings._set_skin("modern")
+
+
+def test_after_no_the_same_click_offers_the_restart_again(modern, monkeypatch):
+    """The prompt is asked against the look that is RUNNING: after "No" the
+    saved choice is already Windows 95, and that used to make the click do
+    nothing, with no other way to restart."""
+    from PySide6.QtWidgets import QMessageBox
+    from vrgallery import pages
+    asked = []
+    monkeypatch.setattr(pages.QMessageBox, "question",
+                        lambda *a, **k: (asked.append(1), QMessageBox.No)[1])
+    s = modern.page_settings
+    s._set_skin("win95")
+    s._set_skin("win95")
+    assert asked == [1, 1]
+    s._set_skin("modern")            # the look on screen: nothing to restart
+    assert asked == [1, 1]
+    assert modern.cfg.get("skin") == "modern"
+
+
+def test_a_dev_restart_runs_run_py(modern, monkeypatch):
+    """Not sys.argv[0]: under `python -m vrgallery` that is __main__.py, which
+    fails on its relative import when run as a script."""
+    from PySide6.QtCore import QProcess
+    started = []
+    monkeypatch.setattr(QProcess, "startDetached",
+                        lambda prog, args, cwd=None: (started.append((prog, list(args))), (True, 1))[1])
+    monkeypatch.setattr(modern, "quit_app", lambda: None)
+    monkeypatch.setattr("sys.argv", [os.path.join(ROOT, "vrgallery", "__main__.py")])
+    modern.restart_app()
+    prog, args = started[0]
+    assert args[0] == os.path.join(ROOT, "run.py")
+    assert args[-1] == "--restarted"
 
 
 def test_a_restart_starts_a_copy_that_waits_for_the_lock(modern, monkeypatch):

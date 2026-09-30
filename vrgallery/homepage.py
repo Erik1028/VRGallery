@@ -845,10 +845,10 @@ class LivePill(Clickable):
         self._tile.setPixmap(classic.icon("globe"))
         lay.addWidget(self._tile, 0, Qt.AlignVCenter)
         self._title = widgets.ElidedLabel("")
-        lay.addWidget(self._title, 0)
+        lay.addWidget(self._title, 1)
         self._sub = _PillFacts()
         self._sub.setFixedHeight(16)
-        lay.addWidget(self._sub, 1)
+        lay.addWidget(self._sub, 0)
         self._dot = QWidget(self)    # 1995 had no presence dot; the tag says it
         self._dot.hide()
 
@@ -976,6 +976,10 @@ class LivePill(Clickable):
         if n:
             bits.append("%d %s" % (n, fmt.plural(n, "photo")))
         self._sub.setText(" · ".join(b for b in bits if b))
+        if style.CLASSIC:
+            # on one line with the world: the facts keep their width and the
+            # world's name is what gets elided (the tooltip has all of it)
+            self._sub.setMinimumWidth(self._sub.full_width())
         # the bar elides a long name; the tooltip is where the whole of it is
         self.setToolTip("%s\n%s\n%s\nClick to open Home"
                         % ("In VRChat now" if self._live else "Last in VRChat",

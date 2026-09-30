@@ -113,6 +113,13 @@ def _arrow_url():
     return p.replace("\\", "/")
 
 
+def saved_accent(cfg_accent):
+    """The accent chosen in Settings, whatever look is on. For what leaves the
+    app -- posters, contact sheets, captioned copies: they keep their dark
+    ground in the Windows 95 look too, and navy on it all but vanished."""
+    return ACCENTS.get(cfg_accent, ACCENTS[DEFAULT_ACCENT])
+
+
 def caps(text):
     """A caption in capitals -- or, in the Windows 95 look, in sentence case."""
     if CLASSIC:
