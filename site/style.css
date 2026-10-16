@@ -1,0 +1,123 @@
+/* VR Gallery: the app's own colours (docs/01-photos.png) - near-black #0D0F15, sidebar panel #121622,
+   blue accent #3D8BFD with the lighter #48A6FF of its sliders and bars. */
+:root{
+  color-scheme:dark;
+  --bg:#0d0f15; --panel:#141824; --line:#252b39; --text:#e8ebf2; --dim:#949cb0;
+  --accent:#3d8bfd; --on-accent:#fff; --accent-soft:rgba(61,139,253,.14); --ok:#4ade80;
+  --sans:"Segoe UI Variable Text","Segoe UI Variable","Segoe UI",system-ui,-apple-system,"Helvetica Neue",Arial,sans-serif;
+  --display:"Segoe UI Variable Display","Segoe UI Variable","Segoe UI",system-ui,-apple-system,"Helvetica Neue",Arial,sans-serif;
+  --mono:"Cascadia Mono",Consolas,ui-monospace,"SF Mono",Menlo,monospace;
+}
+/* Shared layout of Erik1028's app pages: a short manual, one column, real screenshots.
+   Each page puts its app's own colours in :root above this. */
+*{box-sizing:border-box}
+[hidden]{display:none!important}
+html{scroll-behavior:smooth}
+@media (prefers-reduced-motion:reduce){html{scroll-behavior:auto}}
+body{margin:0;background:var(--bg);color:var(--text);font-family:var(--sans);font-size:17px;line-height:1.6;-webkit-font-smoothing:antialiased}
+img{max-width:100%;height:auto;display:block}
+a{color:var(--text);text-decoration:underline;text-decoration-color:var(--accent);text-decoration-thickness:2px;text-underline-offset:3px}
+a:hover{color:var(--accent)}
+:focus-visible{outline:2px solid var(--accent);outline-offset:3px;border-radius:4px}
+h1,h2,h3{font-family:var(--display);margin:0;line-height:1.15;text-wrap:balance}
+h2{font-size:clamp(24px,3.2vw,32px);font-weight:700}
+h3{font-size:18px;font-weight:600}
+p{margin:0}
+code,.mono{font-family:var(--mono)}
+code{font-size:.88em;background:var(--panel);border:1px solid var(--line);border-radius:6px;padding:1px 6px;overflow-wrap:anywhere}
+.wrap{max-width:1120px;margin:0 auto;padding-left:max(20px,env(safe-area-inset-left,0px));padding-right:max(20px,env(safe-area-inset-right,0px))}
+
+.top .wrap{display:flex;align-items:center;gap:20px;padding-block:18px}
+.logo{display:flex;align-items:center;gap:10px;font-family:var(--display);font-weight:700;font-size:19px;text-decoration:none}
+.logo img{border-radius:8px}
+.top nav{margin-left:auto;display:flex;align-items:center;gap:22px;font-size:15px}
+.top nav a{text-decoration:none;color:var(--dim)}
+.top nav a:hover{color:var(--text)}
+@media (max-width:640px){.top nav .opt{display:none}}
+
+.intro{padding-block:48px 32px;display:grid;grid-template-columns:minmax(0,1fr) auto;gap:24px 48px;align-items:end}
+.intro h1{font-size:clamp(40px,6.4vw,72px);font-weight:700;letter-spacing:-0.02em}
+.intro p{font-size:clamp(18px,2vw,21px);color:var(--dim);max-width:34em;margin-top:14px}
+.get{display:flex;flex-direction:column;gap:10px;align-items:flex-start}
+.btn{display:inline-flex;align-items:center;gap:10px;background:var(--accent);color:var(--on-accent);font-weight:700;font-size:17px;text-decoration:none;padding:13px 22px;border-radius:12px}
+.btn:hover{color:var(--on-accent);filter:brightness(1.1)}
+.get .mono{color:var(--dim);font-size:14px}
+.get .alt{font-size:14.5px;color:var(--dim)}
+@media (max-width:820px){.intro{grid-template-columns:1fr}}
+
+.shot{border-radius:14px;overflow:hidden;border:1px solid var(--line);background:var(--panel)}
+.hero-shot figcaption,.cap{margin-top:10px;color:var(--dim);font-size:14px}
+
+section.block{padding-block:64px 0}
+.cards{display:grid;grid-template-columns:repeat(3,minmax(0,1fr));gap:24px;margin-top:24px}
+.card{display:flex;flex-direction:column;gap:10px;min-width:0}
+.card .shot{aspect-ratio:16/10;max-width:100%}
+.card .shot img{width:100%;height:100%;object-fit:cover;object-position:top left}
+.card p{color:var(--dim);font-size:16px}
+.card.text{background:var(--panel);border:1px solid var(--line);border-radius:14px;padding:20px 22px}
+.card .ic{width:36px;height:36px;border-radius:10px;background:var(--accent-soft);color:var(--accent);display:flex;align-items:center;justify-content:center}
+.extras{margin-top:22px;color:var(--dim);font-size:15.5px}
+@media (max-width:820px){.cards{grid-template-columns:1fr}}
+
+.two{display:grid;grid-template-columns:minmax(0,4fr) minmax(0,7fr);gap:24px 56px}
+.two ol{margin:0;padding-left:1.3em;display:flex;flex-direction:column;gap:10px}
+.two ol li::marker{font-family:var(--mono);color:var(--accent)}
+.aside{color:var(--dim);font-size:15.5px;margin-top:18px;padding-top:14px;border-top:1px solid var(--line)}
+@media (max-width:820px){.two{grid-template-columns:1fr}}
+
+.tbl{overflow-x:auto}
+table{width:100%;border-collapse:collapse;font-size:16px}
+th{text-align:left;font-weight:600;color:var(--dim);font-size:14px;padding:0 16px 8px 0}
+td{padding:10px 16px 10px 0;border-top:1px solid var(--line);vertical-align:top}
+td:nth-child(2){color:var(--dim)}
+.yes{color:var(--ok);font-weight:600}.no{color:var(--dim)}
+
+.latest{display:grid;grid-template-columns:minmax(0,7em) minmax(0,1fr);gap:4px 24px;padding-block:18px;border-top:1px solid var(--line);margin-top:20px}
+.latest .v{font-family:var(--mono);color:var(--accent);font-size:15px;padding-top:2px}
+.latest p{color:var(--dim);font-size:15.5px;margin-top:4px}
+@media (max-width:560px){.latest{grid-template-columns:1fr}}
+
+footer{margin-top:80px;border-top:1px solid var(--line)}
+footer .wrap{padding-block:28px 44px;display:flex;flex-wrap:wrap;gap:12px 32px;justify-content:space-between;color:var(--dim);font-size:14.5px}
+footer p{max-width:42em}
+
+/* VR Gallery only: the hero is a wall of the app's own (generated) demo photos drifting behind the title,
+   and the app's timeline rises out of it. */
+.btn{background:linear-gradient(90deg,#3d8bfd,#48a6ff);box-shadow:0 10px 30px rgba(61,139,253,.35)}
+.file{font-family:var(--mono);font-size:13px;color:var(--dim)}
+.band{position:relative;overflow:hidden;isolation:isolate;padding-bottom:150px}
+.wall{position:absolute;inset:-60px -10%;z-index:-2;display:flex;flex-direction:column;gap:14px;transform:rotate(-7deg)}
+.wall .row{overflow:visible}
+.wall .strip{display:flex;gap:14px;width:max-content;animation:drift 120s linear infinite}
+.wall .r1 .strip{animation-duration:150s;animation-direction:reverse;margin-left:-180px}
+.wall .r2 .strip{animation-duration:135s;margin-left:-90px}
+.wall .r3 .strip{animation-duration:165s;animation-direction:reverse;margin-left:-260px}
+.wall img{filter:saturate(1.25);width:clamp(140px,14vw,200px);height:auto;aspect-ratio:166/88;border-radius:10px;flex:none}
+@keyframes drift{to{transform:translateX(-50%)}}
+.band::before{content:"";position:absolute;inset:0;z-index:-1;
+  background:linear-gradient(90deg,rgba(13,15,21,.94) 0%,rgba(13,15,21,.82) 34%,rgba(13,15,21,.35) 68%,rgba(13,15,21,.15) 100%),
+             linear-gradient(to bottom,rgba(13,15,21,.5) 0%,rgba(13,15,21,0) 22%,rgba(13,15,21,0) 62%,var(--bg) 100%)}
+@media (max-width:820px){.band::before{background:linear-gradient(to bottom,rgba(13,15,21,.5) 0%,rgba(13,15,21,.8) 45%,var(--bg) 100%)}}
+.band .top{position:relative}
+.band .intro{display:block;padding-block:72px 0}
+.band .intro h1{font-size:clamp(52px,9vw,112px);letter-spacing:-0.035em;text-shadow:0 4px 30px rgba(0,0,0,.5)}
+.band .intro p{color:#d5dbe8;font-size:clamp(18px,2.1vw,22px);max-width:30em;text-shadow:0 2px 16px rgba(0,0,0,.6)}
+.band .get{margin-top:28px}
+.band .get .mono{color:#b7c0d3}
+.hero-shot.lift{margin:-118px 0 0;position:relative}
+.hero-shot.lift .shot{border-radius:18px;border-color:#2b3242;box-shadow:0 40px 90px rgba(0,0,0,.6),0 0 0 1px rgba(255,255,255,.04)}
+.card .shot img{transition:transform .5s cubic-bezier(.2,.7,.2,1)}
+.card:hover .shot img{transform:scale(1.04)}
+@media (prefers-reduced-motion:reduce){.wall .strip{animation:none}.card .shot img{transition:none}}
+@media (max-width:640px){.band{padding-bottom:90px}.band .intro{padding-top:40px}.hero-shot.lift{margin-top:-64px}}
+
+/* scroll motion (motion.js): only when the script runs and motion is allowed */
+.motion [data-reveal]{transition:opacity .9s cubic-bezier(.2,.7,.2,1),transform .9s cubic-bezier(.2,.7,.2,1);transition-delay:var(--d,0ms)}
+.motion [data-reveal].pre{opacity:0;transform:translateY(40px)}
+/* the hero moves with the scroll: the wall drifts slower than the page, the title lifts away,
+   and the timeline starts tipped back and stands up as you scroll, like a product shot */
+.motion .wall{transform:translateY(calc(var(--sy,0) * .28px)) rotate(-7deg)}
+.motion .band .intro{transform:translateY(calc(var(--sy,0) * -.18px));opacity:calc(1 - var(--sy,0) / 600)}
+.motion .hero-shot.lift{--t:max(0, 1 - var(--sy,0) / 420);transform:perspective(1600px) rotateX(calc(var(--t) * 12deg)) scale(calc(1 - var(--t) * .11));transform-origin:50% 0}
+/* the scale makes up for the perspective: the near (bottom) edge never ends up wider than the page */
+.motion .card.done{transition:none}

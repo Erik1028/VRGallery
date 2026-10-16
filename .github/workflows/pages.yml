@@ -1,0 +1,45 @@
+# Publishes the website in site/ to GitHub Pages (https://erik1028.github.io/VRGallery/).
+# The screenshots it shows are copied in from docs/ at build time.
+name: Website
+
+on:
+  push:
+    branches: [main]
+    paths:
+      - "site/**"
+      - "docs/*.png"
+      - ".github/workflows/pages.yml"
+  workflow_dispatch:
+
+permissions:
+  contents: read
+  pages: write
+  id-token: write
+
+concurrency:
+  group: pages
+  cancel-in-progress: true
+
+jobs:
+  deploy:
+    runs-on: ubuntu-latest
+    environment:
+      name: github-pages
+      url: ${{ steps.deployment.outputs.page_url }}
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Assemble the site
+        run: |
+          mkdir -p _site/img
+          cp -r site/. _site/
+          cp docs/01-photos.png _site/img/
+
+      - uses: actions/configure-pages@v5
+
+      - uses: actions/upload-pages-artifact@v3
+        with:
+          path: _site
+
+      - id: deployment
+        uses: actions/deploy-pages@v4
