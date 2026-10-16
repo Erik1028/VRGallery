@@ -9,7 +9,7 @@
 <meta property="og:type" content="website">
 <meta property="og:site_name" content="Erik1028">
 <meta property="og:url" content="https://erik1028.github.io/VRGallery/">
-<script type="application/ld+json">{"@context": "https://schema.org", "@type": "SoftwareApplication", "name": "VR Gallery", "url": "https://erik1028.github.io/VRGallery/", "description": "A VRChat photo album for Windows that knows which world each photo was taken in and who was there, from VRChat's own logs.", "image": "https://erik1028.github.io/VRGallery/og.png", "operatingSystem": "Windows 10, Windows 11", "applicationCategory": "MultimediaApplication", "downloadUrl": "https://github.com/Erik1028/VRGallery/releases/latest", "isAccessibleForFree": true, "inLanguage": "en", "license": "https://opensource.org/licenses/MIT", "offers": {"@type": "Offer", "price": "0", "priceCurrency": "USD"}, "author": {"@type": "Person", "name": "Erik1028", "url": "https://github.com/Erik1028"}, "sameAs": ["https://github.com/Erik1028/VRGallery"]}</script>
+<script type="application/ld+json">{"@context": "https://schema.org", "@type": "SoftwareApplication", "name": "VR Gallery", "url": "https://erik1028.github.io/VRGallery/", "description": "A VRChat photo album for Windows that knows which world each photo was taken in and who was there, from VRChat's own logs and VRCX metadata.", "image": "https://erik1028.github.io/VRGallery/og.png", "screenshot": "https://erik1028.github.io/VRGallery/img/01-photos.png", "operatingSystem": "Windows 10, Windows 11", "applicationCategory": "MultimediaApplication", "downloadUrl": "https://github.com/Erik1028/VRGallery/releases/latest", "isAccessibleForFree": true, "inLanguage": "en", "license": "https://opensource.org/licenses/MIT", "offers": {"@type": "Offer", "price": "0", "priceCurrency": "USD"}, "author": {"@type": "Person", "name": "Erik1028", "url": "https://github.com/Erik1028"}, "sameAs": ["https://github.com/Erik1028/VRGallery"]}</script>
 <meta property="og:title" content="VR Gallery">
 <meta property="og:description" content="A VRChat photo album that knows which world each photo was taken in and who was there.">
 <meta property="og:image" content="https://erik1028.github.io/VRGallery/og.png">
@@ -48,11 +48,11 @@
 <section class="block" id="features">
 <h2>What it does</h2>
 <div class="cards" data-stagger="110">
-<article class="card"><div class="shot"><img src="img/lightbox.png" width="690" height="431" alt="A photo with its world, avatar and everyone who was in the instance" loading="lazy"></div><h3>Who was there</h3><p>Every photo shows its world, the avatar you wore and everyone in the instance when you took it.</p></article>
+<article class="card"><div class="shot"><img src="img/lightbox.png" width="690" height="431" alt="A photo with its world, avatar and everyone who was in the instance" loading="lazy"></div><h3>Who was there</h3><p>A photo shows its world, the instance type, the avatar you wore and everyone in the instance, wherever VRChat's logs or VRCX's metadata recorded them.</p></article>
 <article class="card"><div class="shot"><img src="img/tags.png" width="780" height="488" alt="People tagged in a photo" loading="lazy"></div><h3>Tag people</h3><p>Press T and box a head. The people the logs say were there come first, so it's usually one click.</p></article>
-<article class="card"><div class="shot"><img src="img/years.png" width="890" height="700" alt="The library by year" loading="lazy"></div><h3>Years to days</h3><p>Zoom out to find the stretch of time, then in on it. Each year and month shows its best photo.</p></article>
+<article class="card"><div class="shot"><img src="img/views.webp" width="800" height="500" alt="The whole library as one sheet of square tiles, with Years, Months, Days and All at the top and a year rail down the side" loading="lazy"></div><h3>Years to days, or all of it</h3><p>Zoom out to find the stretch of time, then in on it; each year and month shows its best photo. All is the whole library as one sheet.</p></article>
 </div>
-<p class="extras" data-reveal>Also: moments and sessions · people profiles · statistics and a year-in-review poster · cleanup of black shots and duplicates · Discord sharing · Quest import</p>
+<p class="extras" data-reveal>Also: moments and sessions · people profiles · star ratings, favourites and albums · statistics and a year-in-review poster · cleanup of black shots, bursts and duplicates · Discord sharing · Quest import · verified backup to another drive · XMP sidecars for Lightroom</p>
 </section>
 
 <section class="block two" id="install" data-reveal>
@@ -60,9 +60,9 @@
 <div>
 <ol>
 <li><a href="https://github.com/Erik1028/VRGallery/releases/latest" data-asset="Setup\.zip$">Download the zip<span class="size"></span></a> and unzip it.</li>
-<li>Run <code>Install VR Gallery.cmd</code>, or just start <code>VRGallery.exe</code> from the folder.</li>
+<li>Run <code>Install VR Gallery.cmd</code>. It copies the app to your user folder and adds Desktop and Start menu shortcuts. Or skip it and start <code>VRGallery\VRGallery.exe</code> right from the folder.</li>
 </ol>
-<p class="aside">Windows 10 / 11, no Python needed. Everything stays on your PC: photos are only read, and cleanup moves files to the Recycle Bin after asking. Leave it in the tray so VRChat's logs are kept before VRChat deletes them.</p>
+<p class="aside">Windows 10 / 11, no Python needed. Your photos are only read; cleanup moves files to the Recycle Bin, after asking. Nothing leaves your PC unless you share a photo yourself; the app only asks GitHub whether there is a newer version. Leave it in the tray: VRChat keeps only its last few logs, and VR Gallery copies each session before they go.</p>
 </div>
 </section>
 
