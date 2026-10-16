@@ -6,13 +6,15 @@ because it reads the same logs VRChat throws away.
 **[⬇ Download the installer](https://github.com/fgs8z2n9qh-tech/VRGallery/releases/latest)**
 · Windows 10/11, no Python needed
 
-![The photo timeline](docs/01-photos.png)
+![The photo timeline](docs/01-photos.jpg)
 
-> Every screenshot on this page comes from a stand-in library built by
-> `tools\make_demo.py`: the structure is a real one — real worlds, real dates, real
-> session and duplicate groupings — but every display name is made up and every photo
-> is a generated scene. Publishing who somebody actually plays with, or the photos
-> they are in, is exactly the thing this app warns you about.
+> Every screenshot on this page comes from a stand-in library built the way
+> `tools\make_demo.py` builds one: the structure is a real one — real worlds, real
+> dates, real session and duplicate groupings — but every display name and avatar name
+> is made up, and the photos are fifteen of the author's own, picked to have nobody in
+> them, stripped of their metadata and repeated across the library. Publishing who
+> somebody actually plays with, or the photos they are in, is exactly the thing this
+> app warns you about.
 
 ## The window
 
@@ -28,9 +30,9 @@ it. Each year and month is a card showing the best photo of that period — a fa
 else the highest rated, else the newest. **All** drops the day headings entirely and
 lays the whole library out as one uninterrupted sheet of square tiles.
 
-![The continuous view](docs/13-continuous.png)
+![The continuous view](docs/13-continuous.jpg)
 
-![Browsing by year](docs/11-years.png)
+![Browsing by year](docs/11-years.jpg)
 
 The wheel glides rather than stepping: notches accumulate into a target and the view
 eases towards it. Scrolling down folds the page title away and the toolbar shrinks to just its controls;
@@ -47,7 +49,7 @@ bubble and notifications are made of the same material. The pinned day header is
 deliberately solid: it spans the full width while the photos under it do not, and glass
 there is half smeared picture and half flat background.
 
-![Frosted panels over the grid](docs/12-glass.png)
+![Frosted panels over the grid](docs/12-glass.jpg)
 
 ## First run
 
@@ -70,28 +72,28 @@ It says what it is going to read, from where, before it reads any of it.
 A run of photos taken in one sitting becomes an event, with the world, the time span
 and who was around. Save any of them as an album, or render it as a contact sheet.
 
-![Moments](docs/02-moments.png)
+![Moments](docs/02-moments.jpg)
 
 ## Sessions
 
 One card per visit to a world: how long you stayed, who was there, and the shots you
 took. The badge tells you whether it was a public, friends+, invite or group instance.
 
-![Sessions](docs/03-sessions.png)
+![Sessions](docs/03-sessions.jpg)
 
 ## People
 
 The People page opens a profile rather than a plain filter: when you first met, where
 you usually run into each other, and who else is normally in the room.
 
-![A person's profile](docs/04-person.png)
+![A person's profile](docs/04-person.jpg)
 
 ## The photo itself
 
 World, avatar worn, instance type, rating, and everyone who was in the instance when
 the shutter went. Click a name to see every photo you share with them.
 
-![Lightbox](docs/06-lightbox.png)
+![Lightbox](docs/06-lightbox.jpg)
 
 ### Tagging people in the frame
 
@@ -103,11 +105,11 @@ The boxes stay out of the way: the photo looks untouched, with only a small badg
 the corner counting who is tagged. Point at somebody and their name appears, the way a
 photo tag works anywhere else. Click the badge to see everyone at once.
 
-![People tagged in a photo](docs/10-tags.png)
+![People tagged in a photo](docs/10-tags.jpg)
 
 ## Statistics and Year in review
 
-![Statistics](docs/05-statistics.png)
+![Statistics](docs/05-statistics.jpg)
 
 One button renders a shareable poster for any year — stats, top worlds and people, and
 a best-of grid picked for variety rather than nine shots of the same moment.
@@ -121,7 +123,7 @@ brightness check, so different avatars on the same flat backdrop are not lumped
 together) and huge PNGs. Everything goes to the **Recycle Bin** after asking; nothing
 is ever deleted permanently.
 
-![Cleanup](docs/07-cleanup.png)
+![Cleanup](docs/07-cleanup.jpg)
 
 **Recently deleted** lists what VR Gallery put in the Recycle Bin, with the date, and
 puts any of it back where it came from. Nothing can be permanently deleted from there
