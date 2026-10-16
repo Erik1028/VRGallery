@@ -675,11 +675,24 @@ class GridPage(QWidget):
             self.headwrap.allow(w, not periods)
         if periods:
             self.btn_filter.setChecked(False)
-        self.rail.setVisible(not periods and self.rail_has_marks())
-        # The rail IS the scrollbar while it is up: two of them side by side in
-        # the same gutter is one too many, and the plain one carries no dates.
+        self._show_rail(periods)
+
+    def _show_rail(self, periods=None):
+        """The rail at the photo levels, if it has a scale to show; never at
+        Years and Months, where the cards are the scale.
+
+        The rail IS the scrollbar while it is up: two of them side by side in
+        the same gutter is one too many, and the plain one carries no dates.
+        Decided from the same answer for both, and again every time the marks
+        change -- rail.set_marks() shows and hides the rail by itself, and the
+        scrollbar used to be left with whatever the last level switch said.
+        """
+        if periods is None:
+            periods = self._levels_on and self.level in ("year", "month")
+        show = not periods and self.rail_has_marks()
+        self.rail.setVisible(show)
         self.view.setVerticalScrollBarPolicy(
-            Qt.ScrollBarAlwaysOff if self.rail.isVisible() else Qt.ScrollBarAsNeeded)
+            Qt.ScrollBarAlwaysOff if show else Qt.ScrollBarAsNeeded)
 
     def rail_has_marks(self):
         return len(getattr(self.rail, "_marks", [])) > 1
@@ -692,6 +705,10 @@ class GridPage(QWidget):
             covers = self.db.photos_by_ids([r["cover_id"] for r in rows])
             self.model.set_periods(rows, self.level, covers,
                                    top_gap=self.head_height())
+            # The model holds cards now, not the photos the stamp below
+            # describes. Left set, Days -> Years -> Days with the same filter
+            # found "nothing changed" and kept the year cards under Days.
+            self._shown = None
             n = sum(r["c"] for r in rows)
             total = sum(r["b"] or 0 for r in rows)
             what = "year" if self.level == "year" else "month"
@@ -792,6 +809,7 @@ class GridPage(QWidget):
         self._rail_due.stop()
         self.rail.set_top_inset(self.head_height())
         self.rail.set_marks(*self.rail_marks())
+        self._show_rail()
         self._sync_rail()
 
     def _sync_rail(self, _v=0):

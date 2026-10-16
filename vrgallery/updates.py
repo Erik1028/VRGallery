@@ -9,8 +9,10 @@ import urllib.request
 
 from . import paths
 
-RELEASES_API = "https://api.github.com/repos/fgs8z2n9qh-tech/VRGallery/releases/latest"
-RELEASES_PAGE = "https://github.com/fgs8z2n9qh-tech/VRGallery/releases/latest"
+# The account was renamed from fgs8z2n9qh-tech. GitHub redirects the old name only
+# until somebody else takes it -- and then this check would be asking them.
+RELEASES_API = "https://api.github.com/repos/Erik1028/VRGallery/releases/latest"
+RELEASES_PAGE = "https://github.com/Erik1028/VRGallery/releases/latest"
 
 
 def _parts(version):

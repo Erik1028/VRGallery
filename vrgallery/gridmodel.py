@@ -343,15 +343,32 @@ class GridModel(QAbstractListModel):
             return self._FLAGS_PERIOD
         return self._FLAGS_ITEM
 
+    @staticmethod
+    def _day_of(kind, payload):
+        """The 'YYYY-MM-DD' a row belongs to, or None.
+
+        The one place that knows every row shape: a header carries (day, count),
+        a burst a list of photos, a photo itself. A year or month card is a
+        dict with no single day, and a spacer has no date at all -- so those
+        say None. month_marks() used to spell this out for itself and forgot
+        the period cards: at Years and Months a rail refresh that landed after
+        the switch (a resize, the timer the Days view had just queued) raised
+        AttributeError on the card's dict.
+        """
+        if kind == KIND_HEADER:
+            return payload[0]
+        if kind == KIND_BURST:
+            return payload[0].day
+        if kind == KIND_PHOTO:
+            return payload.day
+        return None
+
     def day_of_row(self, row):
         """(day, count, header_row) for whatever is at this row, or None."""
         if not (0 <= row < len(self._rows)):
             return None
         kind, payload = self._rows[row]
-        if kind in (KIND_PERIOD, KIND_SPACER):
-            return None
-        day = (payload[0] if kind == KIND_HEADER else
-               payload[0].day if kind == KIND_BURST else payload.day)
+        day = self._day_of(kind, payload)
         if not day:
             return None
         head = row
@@ -366,15 +383,14 @@ class GridModel(QAbstractListModel):
         return self._photos
 
     def month_marks(self):
-        """[(model_row, 'YYYY-MM')] — the first row of each month, for the rail."""
+        """[(model_row, 'YYYY-MM')] — the first row of each month, for the rail.
+
+        Empty at Years and Months: the cards are the scale there, and the rail
+        is not shown."""
         marks = []
         last = None
         for row, (kind, payload) in enumerate(self._rows):
-            if kind == KIND_SPACER:      # a blank row has no date of its own
-                continue
-            day = (payload[0] if kind == KIND_HEADER else
-                   payload[0].day if kind == KIND_BURST else payload.day)
-            ym = (day or "")[:7]
+            ym = (self._day_of(kind, payload) or "")[:7]
             if ym and ym != last:
                 marks.append((row, ym))
                 last = ym

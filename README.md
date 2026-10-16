@@ -3,18 +3,32 @@
 A gallery that knows **which world** each photo was taken in and **who was there** —
 because it reads the same logs VRChat throws away.
 
-**[⬇ Download the installer](https://github.com/fgs8z2n9qh-tech/VRGallery/releases/latest)**
-· Windows 10/11, no Python needed
+**[⬇ Download the installer](https://github.com/Erik1028/VRGallery/releases/latest)**
+· Windows 10/11, no Python needed · [Website](https://erik1028.github.io/VRGallery/)
 
 ![The photo timeline](docs/01-photos.jpg)
 
 > Every screenshot on this page comes from a stand-in library built the way
 > `tools\make_demo.py` builds one: the structure is a real one — real worlds, real
-> dates, real session and duplicate groupings — but every display name and avatar name
-> is made up, and the photos are fifteen of the author's own, picked to have nobody in
-> them, stripped of their metadata and repeated across the library. Publishing who
-> somebody actually plays with, or the photos they are in, is exactly the thing this
-> app warns you about.
+> dates, real session and duplicate groupings — but every display name, photographer
+> and avatar name is made up, user ids are gone, and the photos are fifteen of the
+> author's own, picked to have nobody in them, stripped of their metadata and repeated
+> across the library. Publishing who somebody actually plays with, or the photos they
+> are in, is exactly the thing this app warns you about.
+
+## Home
+
+The app opens on Home rather than on a wall of photos. Four figures for the whole
+library; a card for your last sitting in VRChat — the world, how long, the photos you
+took and who was in the room; this day in earlier years; the worlds you have been to
+lately; and the people who were around for most of your photos. A sitting is a run of
+visits with no break longer than 90 minutes, so an evening that runs past midnight
+stays one evening, headed the way you would say it: *Yesterday afternoon*, *Saturday
+night*. While VRChat is running the card becomes **Right now · in VRChat**, with the
+time so far and the people in the instance with you, and keeps its clock moving.
+
+Every tile opens a page that already exists: Home is a way in, and Photos is one click
+away with all of its levels.
 
 ## The window
 
@@ -22,6 +36,19 @@ Frameless, with the app's own title bar and window buttons, and the sidebar floa
 it as a rounded panel. Dragging and edge-resizing are handed to Windows rather than done
 by hand, so Aero Snap, the snap-layout flyout and the rounded Windows 11 corners all
 still work.
+
+**Where you are, in the title bar.** A pill in the middle of the title bar says which
+world you are in, on every page: green **In VRChat** while the game runs, with the
+instance, the in-world time so far and the photos of this sitting; afterwards a quieter
+**Last in VRChat** and where that was. It reads exactly what the Home card reads, so the
+two never disagree, and a click on it opens Home.
+
+**Two looks.** Settings › Appearance › Look switches between Modern and **Windows 95**:
+the whole window as a 1995 program — grey 3D panels, a navy caption with bevelled
+buttons, the navigation as a folder tree, Microsoft Sans Serif, 16×16 pixel icons, and a
+status bar with the library's count and size and where you are in VRChat. The look is
+read at start-up, so changing it offers to restart the app. Modern also comes with two
+grounds, Midnight and Ember, and five accent colours.
 
 ## Browsing
 
@@ -90,8 +117,9 @@ you usually run into each other, and who else is normally in the room.
 
 ## The photo itself
 
-World, avatar worn, instance type, rating, and everyone who was in the instance when
-the shutter went. Click a name to see every photo you share with them.
+World, avatar worn, instance type, rating, who took it when it was not you, and everyone
+who was in the instance when the shutter went. Click a name to see every photo you share
+with them.
 
 ![Lightbox](docs/06-lightbox.jpg)
 
@@ -132,6 +160,9 @@ either.
 ## Everything else
 
 - Timeline with a month/year rail, search by world / person / file, favorites, albums
+- **Bursts** — a run of shots taken seconds apart folds into one stacked tile; open it
+  to see every frame
+- **Drag out** — drag photos from the grid straight into Explorer or Discord
 - **Filters** — date range, instance type, minimum rating, photos or recordings
 - **Star ratings** (1–5, or the number keys in the lightbox) alongside favorites
 - **Recordings** — `.mp4` and friends sit on the timeline and open in your player
@@ -158,7 +189,7 @@ py -3.12 -m venv .venv
 
 Run the tests with `.venv\Scripts\python.exe -m pytest tests -q`. They cover the log
 parser, moment detection, the database migration, and every path that can move a file —
-plus a headless smoke test that builds every page.
+plus a headless smoke test that builds every page, and the demo builder's anonymising.
 
 Build the app and the shareable installer with `build.ps1` and `make_installer.ps1`;
 pushing a `v*` tag does the same on GitHub Actions and attaches the installer to the
@@ -169,7 +200,8 @@ library exactly as it is), `--data-dir DIR` (use a different library),
 `--shot out.png --page sessions` (UI screenshot).
 
 Helper scripts in `tools\`: `selftest.py` (headless index against the real library),
-`make_demo.py` (pseudonymised copy for screenshots), `integrate.py` (register the app
+`make_demo.py` (pseudonymised copy for screenshots — open it with
+`run.py --data-dir DIR --no-index`), `integrate.py` (register the app
 with Atlas and Hexpad — backs their configs up first and never overwrites an occupied
 slot).
 
