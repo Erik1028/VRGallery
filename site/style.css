@@ -128,3 +128,41 @@ footer p{max-width:42em}
 .motion .hero-shot.lift{--t:max(0, 1 - var(--sy,0) / 420);transform:perspective(1600px) rotateX(calc(var(--t) * 12deg)) scale(calc(1 - var(--t) * .11));transform-origin:50% 0}
 /* the scale makes up for the perspective: the near (bottom) edge never ends up wider than the page */
 .motion .card.done{transition:none}
+
+/* before and after (compare.js): VR Gallery's Days view over VRChat's month folder (drawn here: a file manager with
+   its folders down the side and the month's files, so each side's useful half meets at the middle) */
+.lead{color:var(--dim);margin-top:10px;max-width:40em}
+.ba{--u:calc(100cqw / 1056);container-type:inline-size;position:relative;margin:24px 0 0;aspect-ratio:1056/660;border-radius:14px;overflow:hidden;border:1px solid var(--line);background:#0d0f15;user-select:none;-webkit-user-select:none}
+.ba-before,.ba-after{position:absolute;inset:0}
+.ba-after{clip-path:inset(0 calc(100% - var(--x)) 0 0)}
+.ba-after img{width:100%;height:100%;object-fit:cover}
+.ba-before{display:grid;grid-template-columns:49% 51%;background:#14161c;color:#cfd4df;font-family:var(--sans);font-size:calc(17 * var(--u));line-height:1}
+.ba-before svg{width:calc(22 * var(--u));height:calc(22 * var(--u));flex:none}
+.fb-side{list-style:none;margin:0;padding:calc(26 * var(--u)) calc(18 * var(--u));background:#101217;border-right:1px solid #262a35;display:flex;flex-direction:column;gap:calc(4 * var(--u));color:#9aa2b6}
+.fb-side li{display:flex;align-items:center;gap:calc(10 * var(--u));height:calc(36 * var(--u));padding:0 calc(10 * var(--u));border-radius:calc(6 * var(--u))}
+.fb-side .in1{padding-left:calc(34 * var(--u))}
+.fb-side .in2{padding-left:calc(58 * var(--u))}
+.fb-side .on{background:#262b38;color:#e8ebf2}
+.fb-main{display:flex;flex-direction:column;padding:calc(26 * var(--u)) calc(20 * var(--u)) 0 calc(22 * var(--u));min-width:0}
+.fb-head{display:flex;align-items:center;gap:calc(10 * var(--u));font-size:calc(19 * var(--u));color:#9aa2b6;padding-bottom:calc(18 * var(--u));border-bottom:1px solid #262a35}
+.fb-head svg{width:calc(26 * var(--u));height:calc(26 * var(--u))}
+.fb-head i{font-style:normal;color:#5d6577}
+.fb-head b{color:#e8ebf2;font-weight:600}
+.fb-cols,.fb-list li{display:grid;grid-template-columns:minmax(0,1fr) calc(70 * var(--u));gap:calc(12 * var(--u));align-items:center}
+.fb-cols{padding:calc(14 * var(--u)) 0 calc(10 * var(--u)) calc(38 * var(--u));font-size:calc(15 * var(--u));color:#7d859a}
+.fb-list{list-style:none;margin:0;padding:0}
+.fb-list li{position:relative;height:calc(34.5 * var(--u));padding-left:calc(38 * var(--u));border-radius:calc(6 * var(--u))}
+.fb-list li:nth-child(odd){background:rgba(255,255,255,.025)}
+.fb-list svg{position:absolute;left:calc(7 * var(--u));top:calc(6 * var(--u))}
+.fb-list .fn{font-family:var(--mono);font-size:calc(14 * var(--u));line-height:1.5;white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
+.fb-list .fs,.fb-cols .fs{color:#8d95a8;text-align:right}
+.ba-tag{position:absolute;bottom:12px;padding:5px 10px;border-radius:999px;font-size:13px;font-weight:600;line-height:1.2;background:rgba(10,12,18,.8);color:#e8ebf2;border:1px solid rgba(255,255,255,.14);pointer-events:none;
+  -webkit-backdrop-filter:blur(6px);backdrop-filter:blur(6px)}
+.ba-tag.l{left:12px;background:var(--accent);color:var(--on-accent);border-color:transparent}
+.ba-tag.r{right:12px}
+.ba-handle{position:absolute;top:0;bottom:0;left:var(--x);width:2px;margin-left:-1px;background:#fff;box-shadow:0 0 0 1px rgba(0,0,0,.25),0 0 18px rgba(0,0,0,.5);pointer-events:none}
+.ba-handle::after{content:"";position:absolute;top:50%;left:50%;width:42px;height:42px;margin:-21px 0 0 -21px;border-radius:50%;background:#fff;box-shadow:0 4px 14px rgba(0,0,0,.45);
+  background-image:url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 42 42'%3E%3Cpath d='M17 14l-6 7 6 7M25 14l6 7-6 7' fill='none' stroke='%230d0f15' stroke-width='2.6' stroke-linecap='round' stroke-linejoin='round'/%3E%3C/svg%3E")}
+.ba-range{position:absolute;inset:0;width:100%;height:100%;margin:0;opacity:0;cursor:ew-resize;-webkit-appearance:none;appearance:none;touch-action:pan-y}
+.ba:has(.ba-range:focus-visible) .ba-handle::after{outline:3px solid var(--accent);outline-offset:3px}
+@media (max-width:560px){.ba-tag{font-size:12px;bottom:8px;padding:4px 8px}.ba-tag.l{left:8px}.ba-tag.r{right:8px}}
