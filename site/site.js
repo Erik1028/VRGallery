@@ -1,6 +1,7 @@
 // The latest release from GitHub: version, date, the right download links and a short "latest update".
 // <body data-repo="owner/name">; links with data-asset="regex" point at the matching file of the latest release.
-// Everything here is optional: without it the page still links to the releases page.
+// Everything here is optional: the HTML carries the version, sizes and latest update as of the last edit, so a
+// failed or rate-limited request (GitHub allows 60 an hour per visitor) leaves those in place.
 (function () {
   var repo = document.body.getAttribute('data-repo');
   if (!repo) return;
@@ -27,8 +28,18 @@
       if (box) {
         var name = (rel.name || rel.tag_name).replace(/^[^—–-]*[—–-]\s*/, '') || rel.name;
         name = name.charAt(0).toUpperCase() + name.slice(1);
-        var first = (rel.body || '').split(/\r?\n/).map(function (l) { return l.trim(); })
-          .filter(function (l) { return l && !/^#/.test(l) && !/^[-*]\s*`/.test(l); })[0] || '';
+        // the first paragraph of the notes. Release notes are hard-wrapped, so its lines are joined; a list item
+        // keeps its wrapped continuation lines and ends at the next item. Headings, tables, quotes, a line that is
+        // only a bold title, and the list of downloads (`file` items) are skipped.
+        var para = [], lines = (rel.body || '').split(/\r?\n/).map(function (l) { return l.trim(); });
+        for (var i = 0; i < lines.length; i++) {
+          var l = lines[i];
+          if (!l || /^(#|\||>)/.test(l) || /^\*\*[^*]+\*\*$/.test(l)) { if (para.length) break; continue; }
+          if (/^[-*]\s*`/.test(l)) { if (para.length) break; continue; }
+          if (/^[-*]\s+/.test(l) && para.length) break;
+          para.push(l);
+        }
+        var first = para.join(' ');
         first = first.replace(/^[-*]\s+/, '').replace(/\*\*(.+?)\*\*/g, '$1').replace(/`(.+?)`/g, '$1').replace(/\[(.+?)\]\(.+?\)/g, '$1').replace(/\*+/g, '');
         if (first.length > 220) first = first.slice(0, 217).replace(/\s+\S*$/, '') + '…';
         box.innerHTML = '<span class="v">' + esc(rel.tag_name) + '</span><div><h3>' + esc(name) + '</h3>' +
