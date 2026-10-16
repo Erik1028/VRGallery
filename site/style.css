@@ -110,3 +110,14 @@ footer p{max-width:42em}
 .card:hover .shot img{transform:scale(1.04)}
 @media (prefers-reduced-motion:reduce){.wall .strip{animation:none}.card .shot img{transition:none}}
 @media (max-width:640px){.band{padding-bottom:90px}.band .intro{padding-top:40px}.hero-shot.lift{margin-top:-64px}}
+
+/* scroll motion (motion.js): only when the script runs and motion is allowed */
+.motion [data-reveal]{transition:opacity .9s cubic-bezier(.2,.7,.2,1),transform .9s cubic-bezier(.2,.7,.2,1);transition-delay:var(--d,0ms)}
+.motion [data-reveal].pre{opacity:0;transform:translateY(40px)}
+/* the hero moves with the scroll: the wall drifts slower than the page, the title lifts away,
+   and the timeline starts tipped back and stands up as you scroll, like a product shot */
+.motion .wall{transform:translateY(calc(var(--sy,0) * .28px)) rotate(-7deg)}
+.motion .band .intro{transform:translateY(calc(var(--sy,0) * -.18px));opacity:calc(1 - var(--sy,0) / 600)}
+.motion .hero-shot.lift{--t:max(0, 1 - var(--sy,0) / 420);transform:perspective(1600px) rotateX(calc(var(--t) * 12deg)) scale(calc(1 - var(--t) * .11));transform-origin:50% 0}
+/* the scale makes up for the perspective: the near (bottom) edge never ends up wider than the page */
+.motion .card.done{transition:none}
