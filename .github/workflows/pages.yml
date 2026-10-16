@@ -1,5 +1,6 @@
 # Publishes the website in site/ to GitHub Pages (https://erik1028.github.io/VRGallery/).
-# The screenshots it shows are copied in from docs/ at build time.
+# site/ is the whole site, its screenshots included (site/img, made for the page's sizes);
+# docs/ belongs to the README and is no longer copied in.
 name: Website
 
 on:
@@ -7,7 +8,6 @@ on:
     branches: [main]
     paths:
       - "site/**"
-      - "docs/*.png"
       - ".github/workflows/pages.yml"
   workflow_dispatch:
 
@@ -31,9 +31,8 @@ jobs:
 
       - name: Assemble the site
         run: |
-          mkdir -p _site/img
+          mkdir -p _site
           cp -r site/. _site/
-          cp docs/01-photos.png _site/img/
 
       - uses: actions/configure-pages@v5
 
