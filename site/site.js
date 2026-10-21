@@ -27,6 +27,9 @@
       var box = document.getElementById('latest');
       if (box) {
         var name = (rel.name || rel.tag_name).replace(/^[^—–-]*[—–-]\s*/, '') || rel.name;
+        // a name that is only the app and its version ('Mixtape v0.23.0'): the notes' first heading says it better
+        var head = (rel.body || '').match(/^#{1,4}\s+(.+)$/m);
+        if (name === rel.name && !/[—–-]\s/.test(rel.name || '') && head && !/download|install/i.test(head[1])) name = head[1].replace(/[*_`]/g, '').trim();
         name = name.charAt(0).toUpperCase() + name.slice(1);
         // the first paragraph of the notes. Release notes are hard-wrapped, so its lines are joined; a list item
         // keeps its wrapped continuation lines and ends at the next item. Headings, tables, quotes, a line that is
